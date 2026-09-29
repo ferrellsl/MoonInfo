@@ -7,11 +7,76 @@
 #include <cstdlib>
 #include <string>
 
+#include <cstdint>
+#include <vector>
+
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <objbase.h>
+
 #include "Location.h"
 #include "MoonCalc.h"
+#include "MoonRender.h"
+
+// A BGRA picture as a 24-bit BMP.
+static bool writeBmp(const char * path, const std::vector<std::uint32_t> & pixels, int size)
+{
+  FILE * f = std::fopen(path, "wb");
+  if (! f)
+    return false;
+  int row = (size * 3 + 3) & ~3, bytes = row * size;
+  unsigned char header[54] = { 'B', 'M' };
+  auto put32 = [&](int at, std::uint32_t v) { for (int i = 0; i < 4; ++i) header[at + i] = (unsigned char) (v >> (8 * i)); };
+  put32(2, 54 + bytes); put32(10, 54); put32(14, 40); put32(18, size); put32(22, (std::uint32_t) -size);
+  header[26] = 1; header[28] = 24; put32(34, bytes);
+  std::fwrite(header, 1, 54, f);
+  std::vector<unsigned char> line(row, 0);
+  for (int y = 0; y < size; ++y) {
+    for (int x = 0; x < size; ++x) {
+      std::uint32_t p = pixels[std::size_t(y) * size + x];
+      line[x * 3] = (unsigned char) p; line[x * 3 + 1] = (unsigned char) (p >> 8); line[x * 3 + 2] = (unsigned char) (p >> 16);
+    }
+    std::fwrite(line.data(), 1, row, f);
+  }
+  std::fclose(f);
+  return true;
+}
 
 int main(int argc, char * argv[])
 {
+  // mooninfo-test render <unix seconds> <out.bmp> <size> [latitude longitude angle]:
+  // the Moon as seen from the Earth's centre, north up (or from a place,
+  // turned by angle degrees), drawn from moon_color.jpg and moon_height.png
+  // beside the program.
+  if (argc >= 5 && std::string(argv[1]) == "render") {
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    wchar_t exe[MAX_PATH];
+    std::wstring folder(exe, GetModuleFileNameW(NULL, exe, MAX_PATH));
+    folder = folder.substr(0, folder.find_last_of(L"\\/") + 1);
+    mooninfo::MoonMaps maps;
+    if (! mooninfo::loadMoonMaps(folder, maps)) {
+      std::fprintf(stderr, "can't read moon_color.jpg / moon_height.png\n");
+      return 1;
+    }
+    mooninfo::Observer where;
+    bool topocentric = argc >= 8;
+    double angle = 0;
+    if (topocentric) {
+      where.latitude = std::atof(argv[5]);
+      where.longitude = std::atof(argv[6]);
+      angle = std::atof(argv[7]);
+    }
+    mooninfo::MoonGeometry g = mooninfo::moonGeometry(std::atof(argv[2]), where, topocentric);
+    std::printf("diameter %.4f deg, sub-Earth lon %.3f lat %.3f\n", g.diameter, g.subEarthLon, g.subEarthLat);
+    std::vector<std::uint32_t> pixels;
+    int size = std::atoi(argv[4]);
+    DWORD t0 = GetTickCount();
+    mooninfo::renderMoon(maps, g, size, angle, pixels);
+    std::printf("rendered %dx%d in %lu ms\n", size, size, (unsigned long) (GetTickCount() - t0));
+    return writeBmp(argv[3], pixels, size) ? 0 : 1;
+  }
+
   // mooninfo-test location: both ways of finding the location, separately.
   if (argc == 2 && std::string(argv[1]) == "location") {
     mooninfo::Location w = mooninfo::findWindowsLocation(), i = mooninfo::findInternetLocation();

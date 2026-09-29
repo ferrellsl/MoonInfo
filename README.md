@@ -2,18 +2,18 @@
 
 The Moon's phase, illumination, distance, rise and set, the next quarters
 and its position in the sky, updated every second, with a picture of the
-Moon as it looks from your location. A Windows version of the Moon Info web
+Moon drawn as it looks at that moment from your location. A Windows version of the Moon Info web
 page.
 
 ![MoonInfo in dark mode](docs/mooninfo-dark.png)
 
 ## Download
 
-Get **MoonInfo-1.3-win64.zip** from the
+Get **MoonInfo-2.0-win64.zip** from the
 [Releases page](../../releases) and unzip it anywhere:
 
     MoonInfo.exe   the program (no installation; no DLLs needed)
-    images\        the Moon pictures (keep this folder beside MoonInfo.exe)
+    data\          NASA's Moon maps (keep this folder beside MoonInfo.exe)
 
 Windows 10 or 11, 64-bit. On Linux or macOS it runs under
 [Wine](https://www.winehq.org/) (which has no Windows location service, so
@@ -34,6 +34,13 @@ it finds the location from your internet address).
   Full Moon, Waning Gibbous, Third Quarter or Waning Crescent (the four
   principal phases within about half a day of the exact time).
 - **Distance:** from the Earth's center to the Moon's.
+- **Picture:** drawn from NASA's Lunar Reconnaissance Orbiter maps (the LROC
+  color mosaic and LOLA elevations) for the date, time and place: the exact
+  phase, lit from the Sun's direction, with the relief shaded near the
+  terminator; the Moon's libration (the slight wobble that turns different
+  edge features toward us) and its tilt; its apparent size, which changes
+  with its distance; and earthshine faintly lighting the dark side. It's
+  exact for any date, past or future.
 - **View > Moon as seen from my location** turns the picture by the Moon's
   parallactic angle (the angle between celestial north and straight up at
   the Moon), so it's tilted as it appears in your sky, roughly upside down in
@@ -57,13 +64,16 @@ Visual Studio 2019 (x64) and CMake:
     cmake --build build --config Release
 
 Plain Win32, with the Windows 10 SDK 10.0.19041 (for C++/WinRT's
-`Windows.Devices.Geolocation`); no other libraries. The images aren't in
-this repository: copy the `images` folder from the release zip into the
-project folder, and the build copies it beside `MoonInfo.exe`.
+`Windows.Devices.Geolocation`); no other libraries. NASA's maps aren't in
+this repository: copy the `data` folder from the release zip into the
+project folder, and the build copies it beside `MoonInfo.exe`. (They were
+made from the CGI Moon Kit's `lroc_color_16bit_srgb_4k.tif`, as an 8-bit
+JPEG, and `ldem_16_uint.tif`, resampled to 4096 x 2048 as a 16-bit PNG.)
 
 `build/Release/mooninfo-test.exe` prints the calculations for a time and
 place (`mooninfo-test <unix seconds> <latitude> <longitude>`), or tests
-finding the location (`mooninfo-test location`).
+finding the location (`mooninfo-test location`), or draws the Moon to a BMP
+file (`mooninfo-test render <unix seconds> <out.bmp> <size>`).
 
 ## Support and contact
 
@@ -79,6 +89,8 @@ MoonInfo: MIT license, (c) 2026 Steve Ferrell ([LICENSE](LICENSE)).
 
 - Calculations: [Astronomy Engine](https://github.com/cosinekitty/astronomy),
   (c) 2019-2023 Don Cross (MIT license).
-- Moon images: NASA's Scientific Visualization Studio.
+- Moon maps: NASA's Scientific Visualization Studio
+  ([CGI Moon Kit](https://svs.gsfc.nasa.gov/4720)), from the Lunar
+  Reconnaissance Orbiter's camera (LROC) and laser altimeter (LOLA) teams.
 
 See [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) for details.

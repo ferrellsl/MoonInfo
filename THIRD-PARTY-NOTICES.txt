@@ -6,10 +6,12 @@ Astronomy Engine (the calculations; third_party/astronomy)
   MIT license: see third_party/astronomy/LICENSE.
   https://github.com/cosinekitty/astronomy
 
-Moon images (images/, and the program's icon)
-  NASA's Scientific Visualization Studio, "Moon Phase and Libration".
-  NASA imagery is not copyrighted; credit: NASA's Scientific Visualization
-  Studio.  https://svs.gsfc.nasa.gov/
+Moon maps (data/moon_color.jpg and data/moon_height.png) and the icon
+  NASA's Scientific Visualization Studio, CGI Moon Kit
+  (https://svs.gsfc.nasa.gov/4720), from data by the Lunar Reconnaissance
+  Orbiter camera (LROC, Arizona State University) and laser altimeter (LOLA)
+  teams.  The icon is from NASA's "Moon Phase and Libration" imagery.  NASA
+  imagery is not copyrighted; credit: NASA's Scientific Visualization Studio.
 
-Everything else MoonInfo uses (the window and controls, reading the JPEG
-images, the location service and the internet lookup) is part of Windows.
+Everything else MoonInfo uses (the window and controls, reading the
+maps, the location service and the internet lookup) is part of Windows.

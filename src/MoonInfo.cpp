@@ -34,6 +34,7 @@
 
 #include "Location.h"
 #include "MoonCalc.h"
+#include "MoonRender.h"
 #include "config.h"
 #include "resource.h"
 
@@ -360,81 +361,18 @@ namespace
   // The Moon's picture
   //--------------------------------------------------------------------------
 
-  struct Picture
-  {
-    int width = 0, height = 0;
-    std::vector<std::uint32_t> pixels;   // BGRA, top row first
-  };
+  // The picture is drawn from NASA's maps (MoonRender.cpp), in data\ beside
+  // the program.
+  MoonMaps maps;
+  bool mapsLoaded = false;
 
-  Picture frame;          // the current NASA frame (730 x 730, north up)
-  int frameNumber = -1;
-  Picture shown;          // frame, scaled and turned for the screen
-  double shownAngle = 1e9;
-  int shownFrame = -1;
-
-  // images\moon.NNNN.jpg, decoded with Windows Imaging Component.
-  bool readFrame(int number, Picture & picture)
-  {
-    wchar_t name[32];
-    swprintf(name, 32, L"images\\moon.%04d.jpg", number);
-    std::wstring path = programFolder() + name;
-    IWICImagingFactory * factory = NULL;
-    IWICBitmapDecoder * decoder = NULL;
-    IWICBitmapFrameDecode * source = NULL;
-    IWICBitmapSource * converted = NULL;
-    bool ok = false;
-    if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory))) &&
-        SUCCEEDED(factory->CreateDecoderFromFilename(path.c_str(), NULL, GENERIC_READ,
-                                                     WICDecodeMetadataCacheOnDemand, &decoder)) &&
-        SUCCEEDED(decoder->GetFrame(0, &source)) &&
-        SUCCEEDED(WICConvertBitmapSource(GUID_WICPixelFormat32bppBGRA, source, &converted))) {
-      UINT w = 0, h = 0;
-      converted->GetSize(&w, &h);
-      picture.width = (int) w;
-      picture.height = (int) h;
-      picture.pixels.assign(std::size_t(w) * h, 0);
-      ok = SUCCEEDED(converted->CopyPixels(NULL, w * 4, w * h * 4, (BYTE *) picture.pixels.data()));
-    }
-    if (converted) converted->Release();
-    if (source)    source->Release();
-    if (decoder)   decoder->Release();
-    if (factory)   factory->Release();
-    if (! ok)
-      picture = Picture();
-    return ok;
-  }
-
-  // The frame scaled to size x size and turned clockwise by angle degrees
-  // (bilinear), clipped to a circle on black.
-  void turnPicture(const Picture & src, int size, double angle, Picture & out)
-  {
-    out.width = out.height = size;
-    out.pixels.assign(std::size_t(size) * size, 0);
-    const double a = angle * 3.14159265358979323846 / 180, c = std::cos(a), s = std::sin(a);
-    const double scale = double(src.width) / size, half = size / 2.0, r2 = half * half;
-    for (int y = 0; y < size; ++y)
-      for (int x = 0; x < size; ++x) {
-        double dx = x + 0.5 - half, dy = y + 0.5 - half;
-        if (dx * dx + dy * dy > r2)
-          continue;
-        // Undo the (clockwise, y down) turn to find the source point.
-        double sx = ( dx * c + dy * s) * scale + src.width / 2.0 - 0.5;
-        double sy = (-dx * s + dy * c) * scale + src.height / 2.0 - 0.5;
-        int x0 = (int) std::floor(sx), y0 = (int) std::floor(sy);
-        double fx = sx - x0, fy = sy - y0, rgb[3] = { 0, 0, 0 };
-        for (int k = 0; k < 4; ++k) {
-          int xi = x0 + (k & 1), yi = y0 + (k >> 1);
-          if (xi < 0 || yi < 0 || xi >= src.width || yi >= src.height)
-            continue;
-          double w = ((k & 1) ? fx : 1 - fx) * ((k >> 1) ? fy : 1 - fy);
-          std::uint32_t p = src.pixels[std::size_t(yi) * src.width + xi];
-          rgb[0] += w * (p & 0xFF); rgb[1] += w * ((p >> 8) & 0xFF); rgb[2] += w * ((p >> 16) & 0xFF);
-        }
-        auto channel = [](double v) { return (std::uint32_t) std::min(255.0, v + 0.5); };
-        out.pixels[std::size_t(y) * size + x] =
-          0xFF000000u | (channel(rgb[2]) << 16) | (channel(rgb[1]) << 8) | channel(rgb[0]);
-      }
-  }
+  std::vector<std::uint32_t> shown;   // the picture on screen, BGRA
+  int shownSize = 0;
+  MoonGeometry shownGeometry;
+  double shownAngle = 0;
+  MoonGeometry currentGeometry;       // the latest (redrawn when it changes visibly)
+  double currentAngle = 0;
+  bool haveGeometry = false;
 
   RECT pictureRect()
   {
@@ -446,41 +384,53 @@ namespace
   {
     RECT r = pictureRect();
     FillRect(dc, &r, (HBRUSH) GetStockObject(BLACK_BRUSH));
-    if (! shown.pixels.empty()) {
+    if (! shown.empty() && shownSize == pictureSize) {
       BITMAPINFO bi = {};
       bi.bmiHeader.biSize = sizeof bi.bmiHeader;
-      bi.bmiHeader.biWidth = shown.width;
-      bi.bmiHeader.biHeight = -shown.height;   // top row first
+      bi.bmiHeader.biWidth = shownSize;
+      bi.bmiHeader.biHeight = -shownSize;   // top row first
       bi.bmiHeader.biPlanes = 1;
       bi.bmiHeader.biBitCount = 32;
       bi.bmiHeader.biCompression = BI_RGB;
-      SetDIBitsToDevice(dc, r.left, r.top, shown.width, shown.height, 0, 0, 0, shown.height,
-                        shown.pixels.data(), &bi, DIB_RGB_COLORS);
+      SetDIBitsToDevice(dc, r.left, r.top, shownSize, shownSize, 0, 0, 0, shownSize,
+                        shown.data(), &bi, DIB_RGB_COLORS);
     }
-    else if (frameNumber >= 0) {
+    else if (! mapsLoaded) {
       SetTextColor(dc, RGB(200, 200, 200));
       SetBkMode(dc, TRANSPARENT);
       HFONT old = (HFONT) SelectObject(dc, font);
-      DrawTextW(dc, L"(The Moon's picture, images\\moon.NNNN.jpg, is missing.)", -1, &r,
+      DrawTextW(dc, L"(The Moon's maps, data/moon_color.jpg and moon_height.png, are missing.)", -1, &r,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE);
       SelectObject(dc, old);
     }
   }
 
-  // Show the frame, turned by angle; redrawn only when it changes visibly.
-  void showMoon(int number, double angle)
+  // Whether the Moon has changed enough since it was drawn to draw it again
+  // (it moves smoothly, so every second would be wasted effort).
+  bool changedVisibly(const MoonGeometry & a, const MoonGeometry & b, double angleA, double angleB)
   {
-    if (number != frameNumber) {
-      readFrame(number, frame);
-      frameNumber = number;
-    }
-    if (number == shownFrame && std::fabs(angle - shownAngle) < 0.05 && shown.width == pictureSize)
+    auto apart = [](const Vec3 & u, const Vec3 & v) {   // degrees between two unit vectors
+      double c = u.x * v.x + u.y * v.y + u.z * v.z;
+      return std::acos(std::max(-1.0, std::min(1.0, c))) * 57.29577951308232;
+    };
+    return std::fabs(angleA - angleB) > 0.05 || apart(a.toSun, b.toSun) > 0.02 || apart(a.toMoon, b.toMoon) > 0.02
+           || std::fabs(a.subEarthLon - b.subEarthLon) > 0.02 || std::fabs(a.subEarthLat - b.subEarthLat) > 0.02
+           || std::fabs(a.diameter - b.diameter) > a.diameter * 0.001;
+  }
+
+  // Draw the Moon if it (or the picture's size) has changed.
+  void showMoon(const MoonGeometry & geometry, double angle)
+  {
+    currentGeometry = geometry;
+    currentAngle = angle;
+    haveGeometry = true;
+    if (! mapsLoaded)
       return;
-    if (frame.pixels.empty())
-      shown = Picture();
-    else
-      turnPicture(frame, pictureSize, angle, shown);
-    shownFrame = number;
+    if (shownSize == pictureSize && ! shown.empty() && ! changedVisibly(geometry, shownGeometry, angle, shownAngle))
+      return;
+    renderMoon(maps, geometry, pictureSize, angle, shown);
+    shownSize = pictureSize;
+    shownGeometry = geometry;
     shownAngle = angle;
     RECT r = pictureRect();
     InvalidateRect(mainWindow, &r, FALSE);
@@ -502,9 +452,9 @@ namespace
       return;
     pictureSize = size;
     pictureLeft = left;
-    if (frameNumber >= 0)
-      showMoon(frameNumber, shownAngle);   // (redrawn at the new size)
-    InvalidateRect(mainWindow, NULL, TRUE);  // (and clear where it was)
+    if (haveGeometry)
+      showMoon(currentGeometry, currentAngle);   // (redrawn at the new size)
+    InvalidateRect(mainWindow, NULL, TRUE);      // (and clear where it was)
   }
 
   // The window's inside width that fits the picture exactly, for a given
@@ -639,7 +589,7 @@ namespace
     setValue("parallactic", fixed(moon.parallactic, 2) + degree);
     setValue("ra", fixed(moon.ra, 2) + " h");
     setValue("dec", fixed(moon.dec, 2) + degree);
-    showMoon(moon.frame, observerView ? moon.parallactic : 0);
+    showMoon(moonGeometry(double(when), where), observerView ? moon.parallactic : 0);
   }
 
   //--------------------------------------------------------------------------
@@ -761,7 +711,8 @@ namespace
       "seen from your location.\n\n"
       "(c) 2026 Steve Ferrell, https://lidarwidgets.com\n\n"
       "Calculations: Astronomy Engine, (c) 2019-2023 Don Cross (MIT license).\n"
-      "Moon images: NASA's Scientific Visualization Studio.\n"
+      "Moon maps: NASA's Scientific Visualization Studio (CGI Moon Kit), from the Lunar "
+      "Reconnaissance Orbiter's LROC and LOLA teams.\n"
       "Location: Windows location services, or ipinfo.io.");
     MessageBoxW(mainWindow, text.c_str(), L"About MoonInfo", MB_OK | MB_ICONINFORMATION);
   }
@@ -777,6 +728,9 @@ namespace
       "and east are positive) and the elevation.\n\n"
       "Times are shown in the computer's time zone. Distance: from the Earth's center to the "
       "Moon's.\n\n"
+      "The picture is drawn from NASA's Lunar Reconnaissance Orbiter maps for the date, time "
+      "and place: the exact phase, the libration and tilt, the apparent size (which changes "
+      "with the Moon's distance) and earthshine on the dark side.\n\n"
       "Parallactic angle: the angle between celestial north and straight up at the Moon. "
       "With View > \"Moon as seen from my location\" checked, the picture is turned by it so it's tilted as "
       "the Moon appears in your sky (roughly upside down in the southern hemisphere); "
@@ -1010,6 +964,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int showCommand)
   panel = CreateWindowExW(WS_EX_CONTROLPARENT, L"MoonInfoPanel", NULL,
                           WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPCHILDREN,
                           0, 0, 10, 10, mainWindow, NULL, instance, NULL);
+  mapsLoaded = loadMoonMaps(programFolder() + L"data\\", maps);
   pictureSize = S(imageSize);
   createControls();
 

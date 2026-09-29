@@ -8,7 +8,7 @@
 #  mooninfo-test.exe, which prints the calculations for checking.
 
 cmake_minimum_required (VERSION 3.15)
-project (MOONINFO VERSION 1.3 LANGUAGES C CXX)
+project (MOONINFO VERSION 2.0 LANGUAGES C CXX)
 
 set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,7 +26,7 @@ configure_file ("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/c
 add_library (astronomy STATIC third_party/astronomy/astronomy.c third_party/astronomy/astronomy.h)
 target_include_directories (astronomy PUBLIC "${PROJECT_SOURCE_DIR}/third_party/astronomy")
 
-add_library (mooncalc STATIC src/MoonCalc.cpp src/MoonCalc.h)
+add_library (mooncalc STATIC src/MoonCalc.cpp src/MoonCalc.h src/MoonRender.cpp src/MoonRender.h)
 target_link_libraries (mooncalc PUBLIC astronomy)
 target_include_directories (mooncalc PUBLIC "${PROJECT_SOURCE_DIR}/src")
 
@@ -37,7 +37,7 @@ set_source_files_properties (src/Location.cpp PROPERTIES COMPILE_OPTIONS "/permi
 #  Prints the calculations for a time and place, to check them against the
 #  website, or tests finding the location.
 add_executable (mooninfo-test src/Test.cpp src/Location.cpp)
-target_link_libraries (mooninfo-test mooncalc winhttp windowsapp)
+target_link_libraries (mooninfo-test mooncalc winhttp windowsapp ole32 windowscodecs)
 
 #  --------------------------------------------------------------------------
 #  The program: plain Win32 (it also runs under Wine).
@@ -50,11 +50,12 @@ target_include_directories (MoonInfo PRIVATE "${PROJECT_SOURCE_DIR}/res" "${PROJ
 target_link_libraries (MoonInfo mooncalc user32 gdi32 comctl32 ole32 windowscodecs uxtheme dwmapi
                        advapi32 winhttp windowsapp)
 
-#  The Moon images beside the program (they aren't in the repository: copy
-#  the images folder from the release zip into the project folder).
-if (EXISTS "${PROJECT_SOURCE_DIR}/images")
+#  NASA's Moon maps beside the program, in data\ (moon_color.jpg and
+#  moon_height.png; they aren't in the repository: copy the data folder from
+#  the release zip into the project folder).
+if (EXISTS "${PROJECT_SOURCE_DIR}/data/moon_color.jpg")
   add_custom_command (TARGET MoonInfo POST_BUILD
-                      COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/images" "$<TARGET_FILE_DIR:MoonInfo>/images")
+                      COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/data" "$<TARGET_FILE_DIR:MoonInfo>/data")
 else()
-  message (WARNING "No images folder: MoonInfo will run without the Moon's picture (see README.md)")
+  message (WARNING "No data folder: MoonInfo will run without the Moon's picture (see README.md)")
 endif()

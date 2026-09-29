@@ -4,6 +4,8 @@ The Moon's phase, illumination, rise and set, the next quarters and its
 position in the sky, with a picture of the Moon as it looks from your
 location. A Windows version of the Moon Info web page.
 
+![MoonInfo in dark mode](docs/mooninfo-dark.png)
+
 ## Download
 
 Get **MoonInfo-1.0-win64.zip** from the

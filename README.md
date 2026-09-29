@@ -9,7 +9,7 @@ page.
 
 ## Download
 
-Get **MoonInfo-1.2-win64.zip** from the
+Get **MoonInfo-1.3-win64.zip** from the
 [Releases page](../../releases) and unzip it anywhere:
 
     MoonInfo.exe   the program (no installation; no DLLs needed)

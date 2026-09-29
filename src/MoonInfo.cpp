@@ -770,7 +770,7 @@ namespace
       "the Moon appears in your sky (roughly upside down in the southern hemisphere); "
       "unchecked, it's shown north up.\n\n"
       "Miles and feet: the distance in miles and the elevation in feet (unchecked: km and "
-      "metres).\n\n"
+      "meters).\n\n"
       "Dark mode: light text on a dark window. On the first run it follows Windows' app "
       "theme (Settings > Personalization > Colors).\n\n"
       "The picture grows and shrinks with the window. If the window is too short for all "

@@ -53,10 +53,13 @@ build copies it beside `MoonInfo.exe`.
 place (`mooninfo-test <unix seconds> <latitude> <longitude>`), or tests
 finding the location (`mooninfo-test location`).
 
-## Support
+## Support and contact
 
-None. MoonInfo is free, open-source software provided as is: no support,
-no warranty. You're welcome to fork it and change it.
+MoonInfo is free, open-source software provided as is: no support, no
+warranty. You're welcome to fork it and change it.
+
+To get in touch (questions, ideas, or just to say hello), post in
+[Discussions](https://github.com/ferrellsl/MoonInfo/discussions).
 
 ## Licence and credits
 

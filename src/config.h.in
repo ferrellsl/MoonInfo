@@ -1,0 +1,2 @@
+// MoonInfo build settings (configured by CMake)
+#define MOONINFO_VERSION "@PROJECT_VERSION@"

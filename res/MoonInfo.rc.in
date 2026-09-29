@@ -1,0 +1,30 @@
+// Resources for MoonInfo (configured by CMake)
+#include <winres.h>
+#include "resource.h"
+
+// The first icon is the program's icon in Explorer.
+IDI_MOONINFO ICON "@MOONINFO_RES_DIR@/mooninfo.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,0,0
+ PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,0,0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "FileDescription", "MoonInfo - the Moon's phase, rise and set, and position"
+      VALUE "FileVersion", "@PROJECT_VERSION@"
+      VALUE "ProductName", "MoonInfo"
+      VALUE "ProductVersion", "@PROJECT_VERSION@"
+      VALUE "LegalCopyright", "(c) 2026 Steve Ferrell; Astronomy Engine (c) Don Cross"
+      VALUE "OriginalFilename", "MoonInfo.exe"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

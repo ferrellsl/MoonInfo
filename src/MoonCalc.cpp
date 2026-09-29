@@ -41,6 +41,20 @@ namespace mooninfo
     return names[quarter & 3];
   }
 
+  const char * phaseName(double phase)
+  {
+    const double window = 6.0;   // degrees: the Moon moves ~12.2 degrees a day relative to the Sun
+    phase = std::fmod(std::fmod(phase, 360.0) + 360.0, 360.0);
+    if (phase < window || phase > 360 - window) return "New Moon";
+    if (std::fabs(phase - 90) < window)         return "First Quarter";
+    if (std::fabs(phase - 180) < window)        return "Full Moon";
+    if (std::fabs(phase - 270) < window)        return "Third Quarter";
+    if (phase < 90)                             return "Waxing Crescent";
+    if (phase < 180)                            return "Waxing Gibbous";
+    if (phase < 270)                            return "Waning Gibbous";
+    return "Waning Crescent";
+  }
+
   MoonInfo calculate(double unixSeconds, const Observer & where)
   {
     MoonInfo info;
@@ -61,6 +75,7 @@ namespace mooninfo
     info.dec = equ2000.dec;
     info.azimuth = hor.azimuth;
     info.altitude = hor.altitude;
+    info.distance = Astronomy_VectorLength(Astronomy_GeoMoon(time)) * KM_PER_AU;
 
     // Parallactic angle: the angle at the Moon between celestial north and
     // the observer's zenith (positive when the Moon is west of the meridian).

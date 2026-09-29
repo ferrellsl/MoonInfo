@@ -34,7 +34,7 @@ int main(int argc, char * argv[])
               (long long) m.rise, (long long) m.set);
   for (int i = 0; i < 4; ++i)
     std::printf("quarter %d %lld\n", m.quarters[i].quarter, (long long) m.quarters[i].time);
-  std::printf("azimuth %.6f\naltitude %.6f\nparallactic %.6f\nra %.6f\ndec %.6f\nframe %d\n",
-              m.azimuth, m.altitude, m.parallactic, m.ra, m.dec, m.frame);
+  std::printf("azimuth %.6f\naltitude %.6f\nparallactic %.6f\nra %.6f\ndec %.6f\nframe %d\ndistance %.3f\n",
+              m.azimuth, m.altitude, m.parallactic, m.ra, m.dec, m.frame, m.distance);
   return 0;
 }

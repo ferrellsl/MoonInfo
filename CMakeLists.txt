@@ -8,7 +8,7 @@
 #  mooninfo-test.exe, which prints the calculations for checking.
 
 cmake_minimum_required (VERSION 3.15)
-project (MOONINFO VERSION 1.0 LANGUAGES C CXX)
+project (MOONINFO VERSION 1.1 LANGUAGES C CXX)
 
 set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,31 +30,25 @@ add_library (mooncalc STATIC src/MoonCalc.cpp src/MoonCalc.h)
 target_link_libraries (mooncalc PUBLIC astronomy)
 target_include_directories (mooncalc PUBLIC "${PROJECT_SOURCE_DIR}/src")
 
+#  Location.cpp uses C++/WinRT (Windows.Devices.Geolocation); the Windows 10
+#  SDK 10.0.19041's C++/WinRT needs these switches with Visual Studio 2019.
+set_source_files_properties (src/Location.cpp PROPERTIES COMPILE_OPTIONS "/permissive-;/Zc:twoPhase-;/bigobj;/await")
+
 #  Prints the calculations for a time and place, to check them against the
-#  website.
+#  website, or tests finding the location.
 add_executable (mooninfo-test src/Test.cpp src/Location.cpp)
 target_link_libraries (mooninfo-test mooncalc winhttp windowsapp)
 
 #  --------------------------------------------------------------------------
-#  The program, built with GraphApp (http://enchantia.com/graphapp/).
-set (GRAPHAPP_ROOT "C:/GraphApp" CACHE PATH "GraphApp folder (with src/app.h and graphapp.lib)")
-find_path (GRAPHAPP_INCLUDE_DIR app.h PATHS "${GRAPHAPP_ROOT}/src" NO_DEFAULT_PATH)
-find_library (GRAPHAPP_LIBRARY NAMES graphapp PATHS "${GRAPHAPP_ROOT}" NO_DEFAULT_PATH)
-if (NOT (GRAPHAPP_INCLUDE_DIR AND GRAPHAPP_LIBRARY))
-  message (FATAL_ERROR "GraphApp not found in GRAPHAPP_ROOT (${GRAPHAPP_ROOT})")
-endif()
-
+#  The program: plain Win32 (it also runs under Wine).
 set (MOONINFO_RES_DIR "${PROJECT_SOURCE_DIR}/res")
 configure_file ("${PROJECT_SOURCE_DIR}/res/MoonInfo.rc.in" "${PROJECT_BINARY_DIR}/MoonInfo.rc" @ONLY)
 
-#  WIN32: GraphApp's library supplies WinMain, which calls main().
 add_executable (MoonInfo WIN32 src/MoonInfo.cpp src/Location.cpp src/Location.h res/resource.h
-                              "${PROJECT_BINARY_DIR}/MoonInfo.rc")
-target_include_directories (MoonInfo PRIVATE "${GRAPHAPP_INCLUDE_DIR}" "${PROJECT_SOURCE_DIR}/res" "${PROJECT_BINARY_DIR}")
-#  Location.cpp uses C++/WinRT (Windows.Devices.Geolocation).
-set_source_files_properties (src/Location.cpp PROPERTIES COMPILE_OPTIONS "/permissive-;/Zc:twoPhase-;/bigobj;/await")
-target_link_libraries (MoonInfo mooncalc "${GRAPHAPP_LIBRARY}"
-                       user32 gdi32 comdlg32 shell32 ole32 winmm winhttp windowsapp dwmapi)
+                              "${PROJECT_BINARY_DIR}/MoonInfo.rc" res/MoonInfo.manifest)
+target_include_directories (MoonInfo PRIVATE "${PROJECT_SOURCE_DIR}/res" "${PROJECT_BINARY_DIR}")
+target_link_libraries (MoonInfo mooncalc user32 gdi32 comctl32 ole32 windowscodecs uxtheme dwmapi
+                       advapi32 winhttp windowsapp)
 
 #  The Moon images beside the program (they aren't in the repository: copy
 #  the images folder from the release zip into the project folder).

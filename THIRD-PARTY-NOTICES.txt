@@ -6,45 +6,10 @@ Astronomy Engine (the calculations; third_party/astronomy)
   MIT licence: see third_party/astronomy/LICENSE.
   https://github.com/cosinekitty/astronomy
 
-GraphApp (the window and controls; compiled into MoonInfo.exe)
-  This package includes software which is copyright (c) L. Patrick.
-  All rights reserved.  http://enchantia.com/graphapp/
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions
-  are met:
-  1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
-  2. Redistributions in binary form must reproduce the above copyright
-     notice, this list of conditions and the following disclaimer in the
-     documentation and/or other materials provided with the distribution.
-  3. You may not sell this software package.
-  4. You may include this software in a distribution of other software,
-     and you may charge a nominal fee for the media used.
-  5. You may sell derivative programs, providing that such programs
-     simply use this software in a compiled form.
-  6. You may sell derivative programs which use a compiled, modified
-     version of this software, provided that you have attempted as
-     best as you can to propagate all modifications made to the source
-     code files of this software package back to the original author(s)
-     of this package.
-  THIS SOFTWARE IS PROVIDED BY THE AUTHORS AND CONTRIBUTORS AS IS, AND
-  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-  ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS OR CONTRIBUTORS BE LIABLE
-  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
-  OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
-  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
-  SUCH DAMAGE.
-
-  GraphApp in turn includes:
-  - libjpeg: this software is based in part on the work of the Independent
-    JPEG Group.
-  - libpng and zlib (zlib/libpng licences), copyright their authors.
-
 Moon images (images/, and the program's icon)
   NASA's Scientific Visualization Studio, "Moon Phase and Libration".
   NASA imagery is not copyrighted; credit: NASA's Scientific Visualization
   Studio.  https://svs.gsfc.nasa.gov/
+
+Everything else MoonInfo uses (the window and controls, reading the JPEG
+images, the location service and the internet lookup) is part of Windows.

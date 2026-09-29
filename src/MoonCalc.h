@@ -33,6 +33,7 @@ namespace mooninfo
     double azimuth = 0, altitude = 0;   // degrees, with refraction
     double parallactic = 0;    // degrees: turning the north-up image clockwise by this shows it as seen from here
     double ra = 0, dec = 0;    // J2000, hours and degrees
+    double distance = 0;       // Earth's centre to the Moon's centre, km
     int frame = 0;             // the image frame for the phase (images/moon.NNNN.jpg)
   };
 
@@ -40,6 +41,10 @@ namespace mooninfo
   MoonInfo calculate(double unixSeconds, const Observer & observer);
 
   const char * quarterName(int quarter);
+
+  // "Waxing Crescent", "First Quarter", ... "Waning Crescent": the principal
+  // phases within about half a day (6 degrees) of the exact time.
+  const char * phaseName(double phase);
 }
 
 #endif

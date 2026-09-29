@@ -3,7 +3,7 @@ Third-party software and data in MoonInfo
 
 Astronomy Engine (the calculations; third_party/astronomy)
   Copyright (c) 2019-2023 Don Cross <cosinekitty@gmail.com>
-  MIT licence: see third_party/astronomy/LICENSE.
+  MIT license: see third_party/astronomy/LICENSE.
   https://github.com/cosinekitty/astronomy
 
 Moon images (images/, and the program's icon)

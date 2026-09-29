@@ -748,7 +748,7 @@ namespace
       "The Moon's phase, distance, rise and set, quarters and position, and its picture as "
       "seen from your location.\n\n"
       "(c) 2026 Steve Ferrell, https://lidarwidgets.com\n\n"
-      "Calculations: Astronomy Engine, (c) 2019-2023 Don Cross (MIT licence).\n"
+      "Calculations: Astronomy Engine, (c) 2019-2023 Don Cross (MIT license).\n"
       "Moon images: NASA's Scientific Visualization Studio.\n"
       "Location: Windows location services, or ipinfo.io.");
     MessageBoxW(mainWindow, text.c_str(), L"About MoonInfo", MB_OK | MB_ICONINFORMATION);
@@ -763,7 +763,7 @@ namespace
       "desktop apps in Windows' privacy settings), or failing that, looks up the approximate "
       "location of your internet address. Or type the latitude and longitude (degrees; north "
       "and east are positive) and the elevation.\n\n"
-      "Times are shown in the computer's time zone. Distance: from the Earth's centre to the "
+      "Times are shown in the computer's time zone. Distance: from the Earth's center to the "
       "Moon's.\n\n"
       "Parallactic angle: the angle between celestial north and straight up at the Moon. "
       "With \"As seen from my location\" checked, the picture is turned by it so it's tilted as "
@@ -913,7 +913,7 @@ namespace
                             WS_TABSTOP | BS_AUTOCHECKBOX, imageX, cy, imageSize, rowHeight, ID_VIEW);
     darkCheck = makeControl(mainWindow, L"BUTTON", "Dark mode", WS_TABSTOP | BS_AUTOCHECKBOX,
                             imageX, cy + 28, imageSize, rowHeight, ID_DARK);
-    unitsCheck = makeControl(mainWindow, L"BUTTON", "Miles and feet (unchecked: km and metres)",
+    unitsCheck = makeControl(mainWindow, L"BUTTON", "Miles and feet (unchecked: km and meters)",
                              WS_TABSTOP | BS_AUTOCHECKBOX, imageX, cy + 56, imageSize, rowHeight, ID_UNITS);
     problemLabel = makeControl(mainWindow, L"STATIC", "", SS_LEFT, imageX, cy + 88, imageSize, 2 * rowHeight);
 

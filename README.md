@@ -39,7 +39,7 @@ it finds the location from your internet address).
   the Moon), so it's tilted as it appears in your sky, roughly upside down in
   the southern hemisphere. Unchecked, it's shown north up.
 - **Miles and feet:** the distance in miles and the elevation in feet
-  (unchecked: km and metres).
+  (unchecked: km and meters).
 - **Dark mode:** light text on a dark window, with a dark title bar. On the
   first run it follows Windows' app theme.
 - The picture grows and shrinks with the window. If the window is too short

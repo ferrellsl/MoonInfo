@@ -242,7 +242,9 @@ namespace
   // Layout, in unscaled (96 dpi) pixels.
   const int margin = 12, labelWidth = 150, valueX = margin + labelWidth, valueWidth = 270, rowHeight = 26;
   const int panelWidth = valueX + valueWidth + 8;   // the data column (its scroll bar is added to it)
-  const int imageSize = 400;
+  const int imageSize = 400;        // the picture at the window's first size
+  const int belowPicture = 8 + 88 + 2 * rowHeight;   // the check boxes and message under it
+  int pictureSize = 0;              // the picture on screen, pixels: as big as the window allows
   int imageX = 0;                   // (set once the scroll bar's width is known)
   int contentHeight = 0;            // the data column's height, unscaled
   int scrollPos = 0;                // in screen pixels
@@ -435,7 +437,7 @@ namespace
 
   RECT pictureRect()
   {
-    RECT r = { S(imageX), S(margin), S(imageX + imageSize), S(margin + imageSize) };
+    RECT r = { S(imageX), S(margin), S(imageX) + pictureSize, S(margin) + pictureSize };
     return r;
   }
 
@@ -471,16 +473,40 @@ namespace
       readFrame(number, frame);
       frameNumber = number;
     }
-    if (number == shownFrame && std::fabs(angle - shownAngle) < 0.05)
+    if (number == shownFrame && std::fabs(angle - shownAngle) < 0.05 && shown.width == pictureSize)
       return;
     if (frame.pixels.empty())
       shown = Picture();
     else
-      turnPicture(frame, S(imageSize), angle, shown);
+      turnPicture(frame, pictureSize, angle, shown);
     shownFrame = number;
     shownAngle = angle;
     RECT r = pictureRect();
     InvalidateRect(mainWindow, &r, FALSE);
+  }
+
+  // Fit the picture to the window (the largest square beside the data
+  // column, above the check boxes), and move the check boxes under it.
+  void fitPicture()
+  {
+    if (! viewCheck)
+      return;
+    RECT client;
+    GetClientRect(mainWindow, &client);
+    int width = client.right - S(imageX) - S(margin);
+    int height = client.bottom - S(margin) - S(belowPicture);
+    int size = std::max(S(120), std::min(width, height));
+    int y = S(margin) + size + S(8), w = std::max(size, S(imageSize));
+    MoveWindow(viewCheck, S(imageX), y, w, S(rowHeight), TRUE);
+    MoveWindow(darkCheck, S(imageX), y + S(28), w, S(rowHeight), TRUE);
+    MoveWindow(unitsCheck, S(imageX), y + S(56), w, S(rowHeight), TRUE);
+    MoveWindow(problemLabel, S(imageX), y + S(88), w, S(2 * rowHeight), TRUE);
+    if (size == pictureSize)
+      return;
+    pictureSize = size;
+    if (frameNumber >= 0)
+      showMoon(frameNumber, shownAngle);   // (redrawn at the new size)
+    InvalidateRect(mainWindow, NULL, TRUE);  // (and clear where a bigger one was)
   }
 
   //--------------------------------------------------------------------------
@@ -747,8 +773,8 @@ namespace
       "metres).\n\n"
       "Dark mode: light text on a dark window. On the first run it follows Windows' app "
       "theme (Settings > Personalization > Colors).\n\n"
-      "If the window is too short for all the data, scroll it with the scroll bar or the "
-      "mouse wheel.\n\n"
+      "The picture grows and shrinks with the window. If the window is too short for all "
+      "the data, scroll it with the scroll bar or the mouse wheel.\n\n"
       "Your settings are kept in %APPDATA%\\MoonInfo\\settings.ini.");
     MessageBoxW(mainWindow, text.c_str(), L"MoonInfo Help", MB_OK | MB_ICONINFORMATION);
   }
@@ -806,6 +832,7 @@ namespace
         RECT r;
         GetClientRect(hwnd, &r);
         MoveWindow(panel, 0, 0, S(panelWidth) + GetSystemMetrics(SM_CXVSCROLL), r.bottom, TRUE);
+        fitPicture();
         return 0;
       }
       case WM_GETMINMAXINFO: {
@@ -957,7 +984,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int showCommand)
   panel = CreateWindowExW(WS_EX_CONTROLPARENT, L"MoonInfoPanel", NULL,
                           WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPCHILDREN,
                           0, 0, 10, 10, mainWindow, NULL, instance, NULL);
+  pictureSize = S(imageSize);
   createControls();
+  fitPicture();
   applyTheme(settings.darkMode);
 
   update();

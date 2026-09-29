@@ -9,7 +9,7 @@ page.
 
 ## Download
 
-Get **MoonInfo-1.1-win64.zip** from the
+Get **MoonInfo-1.2-win64.zip** from the
 [Releases page](../../releases) and unzip it anywhere:
 
     MoonInfo.exe   the program (no installation; no DLLs needed)
@@ -42,8 +42,8 @@ it finds the location from your internet address).
   (unchecked: km and metres).
 - **Dark mode:** light text on a dark window, with a dark title bar. On the
   first run it follows Windows' app theme.
-- If the window is too short for all the data, scroll it with the scroll bar
-  or the mouse wheel.
+- The picture grows and shrinks with the window. If the window is too short
+  for all the data, scroll it with the scroll bar or the mouse wheel.
 
 Times are in the computer's time zone. Settings are kept in
 `%APPDATA%\MoonInfo\settings.ini`.

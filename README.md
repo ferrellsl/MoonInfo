@@ -33,7 +33,7 @@ it finds the location from your internet address).
 - **Phase name:** New Moon, Waxing Crescent, First Quarter, Waxing Gibbous,
   Full Moon, Waning Gibbous, Third Quarter or Waning Crescent (the four
   principal phases within about half a day of the exact time).
-- **Distance:** from the Earth's centre to the Moon's.
+- **Distance:** from the Earth's center to the Moon's.
 - **Picture:** *As seen from my location* turns the picture by the Moon's
   parallactic angle (the angle between celestial north and straight up at
   the Moon), so it's tilted as it appears in your sky, roughly upside down in
@@ -72,12 +72,12 @@ warranty. You're welcome to fork it and change it.
 To get in touch (questions, ideas, or just to say hello), post in
 [Discussions](https://github.com/ferrellsl/MoonInfo/discussions).
 
-## Licence and credits
+## License and credits
 
-MoonInfo: MIT licence, (c) 2026 Steve Ferrell ([LICENSE](LICENSE)).
+MoonInfo: MIT license, (c) 2026 Steve Ferrell ([LICENSE](LICENSE)).
 
 - Calculations: [Astronomy Engine](https://github.com/cosinekitty/astronomy),
-  (c) 2019-2023 Don Cross (MIT licence).
+  (c) 2019-2023 Don Cross (MIT license).
 - Moon images: NASA's Scientific Visualization Studio.
 
 See [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) for details.

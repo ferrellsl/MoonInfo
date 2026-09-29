@@ -4,7 +4,7 @@
 #    cmake -S . -B build -G "Visual Studio 16 2019" -A x64
 #    cmake --build build --config Release
 #  Produces build/Release/MoonInfo.exe (self-contained: static runtime, no
-#  DLLs) with the Moon images copied beside it in build/Release/images, and
+#  DLLs) with NASA's Moon maps copied beside it in build/Release/data, and
 #  mooninfo-test.exe, which prints the calculations for checking.
 
 cmake_minimum_required (VERSION 3.15)

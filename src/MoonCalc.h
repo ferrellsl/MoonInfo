@@ -34,7 +34,7 @@ namespace mooninfo
     double parallactic = 0;    // degrees: turning the north-up image clockwise by this shows it as seen from here
     double ra = 0, dec = 0;    // J2000, hours and degrees
     double distance = 0;       // Earth's centre to the Moon's centre, km
-    int frame = 0;             // the image frame for the phase (images/moon.NNNN.jpg)
+    int frame = 0;             // the Moon Info website's image frame for the phase (moon.NNNN.jpg)
   };
 
   // Everything for the given time (UTC seconds) and place.

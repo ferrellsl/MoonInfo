@@ -232,7 +232,8 @@ namespace
 
   HWND dateEdit, autoCheck, locationButton, locationStatus;
   HWND latEdit, lonEdit, elevEdit, elevLabel;
-  HWND viewCheck, darkCheck, unitsCheck, problemLabel;
+  HWND problemLabel;
+  HMENU viewMenu;                  // the View menu's options
   std::map<std::string, HWND> values;   // the results, by name
 
   enum { ID_AUTO = 100, ID_LOCATION, ID_VIEW, ID_DARK, ID_UNITS, ID_EXIT, ID_HELP, ID_ABOUT };
@@ -243,8 +244,8 @@ namespace
   const int margin = 12, labelWidth = 150, valueX = margin + labelWidth, valueWidth = 270, rowHeight = 26;
   const int panelWidth = valueX + valueWidth + 8;   // the data column (its scroll bar is added to it)
   const int imageSize = 400;        // the picture at the window's first size
-  const int belowPicture = 8 + 88 + 2 * rowHeight;   // the check boxes and message under it
   int pictureSize = 0;              // the picture on screen, pixels: as big as the window allows
+  int pictureLeft = 0;              // its left edge (it's centered when there's room to spare)
   int imageX = 0;                   // (set once the scroll bar's width is known)
   int contentHeight = 0;            // the data column's height, unscaled
   int scrollPos = 0;                // in screen pixels
@@ -437,7 +438,7 @@ namespace
 
   RECT pictureRect()
   {
-    RECT r = { S(imageX), S(margin), S(imageX) + pictureSize, S(margin) + pictureSize };
+    RECT r = { pictureLeft, S(margin), pictureLeft + pictureSize, S(margin) + pictureSize };
     return r;
   }
 
@@ -485,29 +486,31 @@ namespace
     InvalidateRect(mainWindow, &r, FALSE);
   }
 
-  // Fit the picture to the window (the largest square beside the data
-  // column, above the check boxes), and move the check boxes under it.
+  // Fit the picture to the window: the largest square beside the data
+  // column (centered when the window is wider, e.g. maximized).
   void fitPicture()
   {
-    if (! viewCheck)
+    if (! mainWindow)
       return;
     RECT client;
     GetClientRect(mainWindow, &client);
     int width = client.right - S(imageX) - S(margin);
-    int height = client.bottom - S(margin) - S(belowPicture);
+    int height = client.bottom - 2 * S(margin);
     int size = std::max(S(120), std::min(width, height));
-    int y = S(margin) + size + S(8), w = std::max(size, S(imageSize));
-    MoveWindow(viewCheck, S(imageX), y, w, S(rowHeight), TRUE);
-    MoveWindow(darkCheck, S(imageX), y + S(28), w, S(rowHeight), TRUE);
-    MoveWindow(unitsCheck, S(imageX), y + S(56), w, S(rowHeight), TRUE);
-    MoveWindow(problemLabel, S(imageX), y + S(88), w, S(2 * rowHeight), TRUE);
-    if (size == pictureSize)
+    int left = S(imageX) + std::max(0, (width - size) / 2);
+    if (size == pictureSize && left == pictureLeft)
       return;
     pictureSize = size;
+    pictureLeft = left;
     if (frameNumber >= 0)
       showMoon(frameNumber, shownAngle);   // (redrawn at the new size)
-    InvalidateRect(mainWindow, NULL, TRUE);  // (and clear where a bigger one was)
+    InvalidateRect(mainWindow, NULL, TRUE);  // (and clear where it was)
   }
+
+  // The window's inside width that fits the picture exactly, for a given
+  // inside height (the picture's height is the window's, less margins).
+  int clientWidthFor(int clientHeight) { return clientHeight + S(imageX) - S(margin); }
+  int clientHeightFor(int clientWidth) { return clientWidth - S(imageX) + S(margin); }
 
   //--------------------------------------------------------------------------
   // Finding the location (on a worker thread)
@@ -573,7 +576,7 @@ namespace
 
   void update()
   {
-    bool automatic = isChecked(autoCheck), observerView = isChecked(viewCheck);
+    bool automatic = isChecked(autoCheck), observerView = settings.observerView;
     std::time_t now = std::time(NULL), when = now;
     if (automatic && now != lastTime)
       setText(dateEdit, formatLocal(now));
@@ -720,9 +723,8 @@ namespace
   // in is converted, so the place stays the same.
   void onUnits()
   {
-    bool imperial = isChecked(unitsCheck);
-    if (imperial == settings.imperial)
-      return;
+    bool imperial = ! settings.imperial;
+    CheckMenuItem(viewMenu, ID_UNITS, imperial ? MF_CHECKED : MF_UNCHECKED);
     double elevation;
     if (parseNumber(controlText(elevEdit), elevation))
       setText(elevEdit, fixed(imperial ? elevation / metresPerFoot : elevation * metresPerFoot, 0));
@@ -734,9 +736,19 @@ namespace
     update();
   }
 
+  void onObserverView()
+  {
+    settings.observerView = ! settings.observerView;
+    CheckMenuItem(viewMenu, ID_VIEW, settings.observerView ? MF_CHECKED : MF_UNCHECKED);
+    saveSettings(settings);
+    lastInputs.clear();   // redraw now
+    update();
+  }
+
   void onDarkMode()
   {
-    settings.darkMode = isChecked(darkCheck);
+    settings.darkMode = ! settings.darkMode;
+    CheckMenuItem(viewMenu, ID_DARK, settings.darkMode ? MF_CHECKED : MF_UNCHECKED);
     saveSettings(settings);
     applyTheme(settings.darkMode);
   }
@@ -766,14 +778,15 @@ namespace
       "Times are shown in the computer's time zone. Distance: from the Earth's center to the "
       "Moon's.\n\n"
       "Parallactic angle: the angle between celestial north and straight up at the Moon. "
-      "With \"As seen from my location\" checked, the picture is turned by it so it's tilted as "
+      "With View > \"Moon as seen from my location\" checked, the picture is turned by it so it's tilted as "
       "the Moon appears in your sky (roughly upside down in the southern hemisphere); "
       "unchecked, it's shown north up.\n\n"
-      "Miles and feet: the distance in miles and the elevation in feet (unchecked: km and "
+      "View > Miles and feet: the distance in miles and the elevation in feet (unchecked: km and "
       "meters).\n\n"
-      "Dark mode: light text on a dark window. On the first run it follows Windows' app "
+      "View > Dark mode: light text on a dark window. On the first run it follows Windows' app "
       "theme (Settings > Personalization > Colors).\n\n"
-      "The picture grows and shrinks with the window. If the window is too short for all "
+      "The picture grows and shrinks with the window (whose width follows its height as you "
+      "resize it, so the picture fills it). If the window is too short for all "
       "the data, scroll it with the scroll bar or the mouse wheel.\n\n"
       "Your settings are kept in %APPDATA%\\MoonInfo\\settings.ini.");
     MessageBoxW(mainWindow, text.c_str(), L"MoonInfo Help", MB_OK | MB_ICONINFORMATION);
@@ -784,7 +797,7 @@ namespace
     switch (LOWORD(wp)) {
       case ID_AUTO:     onAutomatic(); break;
       case ID_LOCATION: requestLocation(false); break;
-      case ID_VIEW:     update(); break;
+      case ID_VIEW:     onObserverView(); break;
       case ID_DARK:     onDarkMode(); break;
       case ID_UNITS:    onUnits(); break;
       case ID_EXIT:     DestroyWindow(mainWindow); break;
@@ -834,6 +847,24 @@ namespace
         MoveWindow(panel, 0, 0, S(panelWidth) + GetSystemMetrics(SM_CXVSCROLL), r.bottom, TRUE);
         fitPicture();
         return 0;
+      }
+      case WM_SIZING: {
+        // Keep the picture filling the right side as the window is dragged:
+        // its width follows its height (or, dragging a side, the other way).
+        RECT * w = (RECT *) lp;
+        RECT frame = { 0, 0, 0, 0 };
+        AdjustWindowRectEx(&frame, GetWindowLongW(hwnd, GWL_STYLE), TRUE, GetWindowLongW(hwnd, GWL_EXSTYLE));
+        int extraW = frame.right - frame.left, extraH = frame.bottom - frame.top;
+        if (wp == WMSZ_LEFT || wp == WMSZ_RIGHT)
+          w->bottom = w->top + clientHeightFor((w->right - w->left) - extraW) + extraH;
+        else {
+          int width = clientWidthFor((w->bottom - w->top) - extraH) + extraW;
+          if (wp == WMSZ_LEFT || wp == WMSZ_TOPLEFT || wp == WMSZ_BOTTOMLEFT)
+            w->left = w->right - width;
+          else
+            w->right = w->left + width;
+        }
+        return TRUE;
       }
       case WM_GETMINMAXINFO: {
         MINMAXINFO * mm = (MINMAXINFO *) lp;
@@ -905,33 +936,28 @@ namespace
     addValue(y, "Parallactic angle:", "parallactic"); y += rowHeight;
     addValue(y, "RA (J2000):", "ra");                 y += rowHeight;
     addValue(y, "Dec (J2000):", "dec");               y += rowHeight;
+    problemLabel = makeControl(panel, L"STATIC", "", SS_LEFT, margin, y + 5, panelWidth - 2 * margin, 2 * rowHeight);
+    y += 2 * rowHeight;
     contentHeight = y + margin;
-
-    // Beside the picture
-    int cy = margin + imageSize + 8;
-    viewCheck = makeControl(mainWindow, L"BUTTON", "As seen from my location (unchecked: north up)",
-                            WS_TABSTOP | BS_AUTOCHECKBOX, imageX, cy, imageSize, rowHeight, ID_VIEW);
-    darkCheck = makeControl(mainWindow, L"BUTTON", "Dark mode", WS_TABSTOP | BS_AUTOCHECKBOX,
-                            imageX, cy + 28, imageSize, rowHeight, ID_DARK);
-    unitsCheck = makeControl(mainWindow, L"BUTTON", "Miles and feet (unchecked: km and meters)",
-                             WS_TABSTOP | BS_AUTOCHECKBOX, imageX, cy + 56, imageSize, rowHeight, ID_UNITS);
-    problemLabel = makeControl(mainWindow, L"STATIC", "", SS_LEFT, imageX, cy + 88, imageSize, 2 * rowHeight);
 
     check(autoCheck, settings.automatic);
     EnableWindow(dateEdit, ! settings.automatic);
-    check(viewCheck, settings.observerView);
-    check(darkCheck, settings.darkMode);
-    check(unitsCheck, settings.imperial);
   }
 
   HMENU createMenu()
   {
     HMENU bar = CreateMenu(), file = CreatePopupMenu(), help = CreatePopupMenu();
+    viewMenu = CreatePopupMenu();
     AppendMenuW(file, MF_STRING, ID_EXIT, L"E&xit");
+    auto checked = [](bool on) { return MF_STRING | (on ? MF_CHECKED : MF_UNCHECKED); };
+    AppendMenuW(viewMenu, checked(settings.observerView), ID_VIEW, L"Moon &as seen from my location (unchecked: north up)");
+    AppendMenuW(viewMenu, checked(settings.darkMode), ID_DARK, L"&Dark mode");
+    AppendMenuW(viewMenu, checked(settings.imperial), ID_UNITS, L"&Miles and feet (unchecked: km and meters)");
     AppendMenuW(help, MF_STRING, ID_HELP, L"&Using MoonInfo");
     AppendMenuW(help, MF_SEPARATOR, 0, NULL);
     AppendMenuW(help, MF_STRING, ID_ABOUT, L"&About MoonInfo");
     AppendMenuW(bar, MF_POPUP, (UINT_PTR) file, L"&File");
+    AppendMenuW(bar, MF_POPUP, (UINT_PTR) viewMenu, L"&View");
     AppendMenuW(bar, MF_POPUP, (UINT_PTR) help, L"&Help");
     return bar;
   }
@@ -986,6 +1012,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int showCommand)
                           0, 0, 10, 10, mainWindow, NULL, instance, NULL);
   pictureSize = S(imageSize);
   createControls();
+
+  // Tall enough to show all the data (within the screen), and wide enough
+  // for the picture to fill the right side.
+  RECT work;
+  SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+  RECT frame = { 0, 0, 0, 0 };
+  AdjustWindowRectEx(&frame, WS_OVERLAPPEDWINDOW, TRUE, WS_EX_CONTROLPARENT);
+  int clientH = std::min<int>(S(contentHeight), (work.bottom - work.top) - (frame.bottom - frame.top));
+  SetWindowPos(mainWindow, NULL, 0, 0, clientWidthFor(clientH) + (frame.right - frame.left),
+               clientH + (frame.bottom - frame.top), SWP_NOMOVE | SWP_NOZORDER);
   fitPicture();
   applyTheme(settings.darkMode);
 

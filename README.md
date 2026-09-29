@@ -34,15 +34,16 @@ it finds the location from your internet address).
   Full Moon, Waning Gibbous, Third Quarter or Waning Crescent (the four
   principal phases within about half a day of the exact time).
 - **Distance:** from the Earth's center to the Moon's.
-- **Picture:** *As seen from my location* turns the picture by the Moon's
+- **View > Moon as seen from my location** turns the picture by the Moon's
   parallactic angle (the angle between celestial north and straight up at
   the Moon), so it's tilted as it appears in your sky, roughly upside down in
   the southern hemisphere. Unchecked, it's shown north up.
-- **Miles and feet:** the distance in miles and the elevation in feet
+- **View > Miles and feet:** the distance in miles and the elevation in feet
   (unchecked: km and meters).
-- **Dark mode:** light text on a dark window, with a dark title bar. On the
+- **View > Dark mode:** light text on a dark window, with a dark title bar. On the
   first run it follows Windows' app theme.
-- The picture grows and shrinks with the window. If the window is too short
+- The picture grows and shrinks with the window; as you resize it, the
+  window keeps the picture filling its right side. If the window is too short
   for all the data, scroll it with the scroll bar or the mouse wheel.
 
 Times are in the computer's time zone. Settings are kept in

@@ -37,6 +37,7 @@
 #include "MoonCalc.h"
 #include "MoonRender.h"
 #include "SkyCharts.h"
+#include "Stars.h"
 #include "config.h"
 #include "resource.h"
 
@@ -179,6 +180,7 @@ namespace
     bool darkMode = false;          // (first run: as Windows' app theme)
     bool imperial = false;          // elevation in feet, distance in miles (else metres, km)
     bool labels = false;            // name the seas and craters on the picture
+    bool stars = true;              // the stars behind the Moon
     bool stored = false;            // read from the settings file
   };
 
@@ -212,6 +214,7 @@ namespace
       else if (key == "darkMode")                                  s.darkMode = value != "0";
       else if (key == "imperial")                                  s.imperial = value != "0";
       else if (key == "labels")                                    s.labels = value != "0";
+      else if (key == "stars")                                     s.stars = value != "0";
     }
     return s;
   }
@@ -222,7 +225,8 @@ namespace
     out << "latitude=" << s.latitude << "\nlongitude=" << s.longitude << "\nelevation=" << s.elevation
         << "\ndate=" << s.date << "\nautomatic=" << (s.automatic ? 1 : 0)
         << "\nobserverView=" << (s.observerView ? 1 : 0) << "\ndarkMode=" << (s.darkMode ? 1 : 0)
-        << "\nimperial=" << (s.imperial ? 1 : 0) << "\nlabels=" << (s.labels ? 1 : 0) << "\n";
+        << "\nimperial=" << (s.imperial ? 1 : 0) << "\nlabels=" << (s.labels ? 1 : 0) << "\nstars=" << (s.stars ? 1 : 0)
+        << "\n";
   }
 
   //--------------------------------------------------------------------------
@@ -243,7 +247,7 @@ namespace
   std::map<std::string, HWND> values;   // the results, by name
 
   enum { ID_AUTO = 100, ID_LOCATION, ID_VIEW, ID_DARK, ID_UNITS, ID_EXIT, ID_HELP, ID_ABOUT,
-         ID_LABELS, ID_PREVIOUS_DAY, ID_NEXT_DAY, ID_PLAY_DAY, ID_PLAY_MONTH };
+         ID_LABELS, ID_STARS, ID_PREVIOUS_DAY, ID_NEXT_DAY, ID_PLAY_DAY, ID_PLAY_MONTH };
   const UINT WM_LOCATED = WM_APP + 1;   // the location worker has finished
   const UINT_PTR TIMER_ID = 1, TIMER_PLAY = 2;
 
@@ -380,7 +384,11 @@ namespace
   MoonMaps maps;
   bool mapsLoaded = false;
 
-  std::vector<std::uint32_t> shown;   // the picture on screen, BGRA
+  StarCatalog starCatalog;            // (data\moon_stars.bin)
+  std::vector<std::uint32_t> shown;   // the Moon as last drawn, BGRA
+  std::vector<std::uint32_t> picture; // the picture on screen: the Moon, and the stars behind it
+  Vec3 starsAt;                       // where the Moon was among the stars when they were last drawn
+  double starsAngle = 0;
   int shownSize = 0;
   MoonGeometry shownGeometry;
   double shownAngle = 0;
@@ -443,7 +451,7 @@ namespace
   void paintPicture(HDC dc)
   {
     RECT r = pictureRect();
-    if (! shown.empty() && shownSize == pictureSize) {
+    if (! picture.empty() && shownSize == pictureSize) {
       BITMAPINFO bi = {};
       bi.bmiHeader.biSize = sizeof bi.bmiHeader;
       bi.bmiHeader.biWidth = shownSize;
@@ -453,14 +461,14 @@ namespace
       bi.bmiHeader.biCompression = BI_RGB;
       if (! settings.labels) {
         SetDIBitsToDevice(dc, r.left, r.top, shownSize, shownSize, 0, 0, 0, shownSize,
-                          shown.data(), &bi, DIB_RGB_COLORS);
+                          picture.data(), &bi, DIB_RGB_COLORS);
         return;
       }
       // With the names: put together in a bitmap first, so they don't flicker.
       HDC memory = CreateCompatibleDC(dc);
       HBITMAP bitmap = CreateCompatibleBitmap(dc, shownSize, shownSize);
       HGDIOBJ old = SelectObject(memory, bitmap);
-      SetDIBitsToDevice(memory, 0, 0, shownSize, shownSize, 0, 0, 0, shownSize, shown.data(), &bi, DIB_RGB_COLORS);
+      SetDIBitsToDevice(memory, 0, 0, shownSize, shownSize, 0, 0, 0, shownSize, picture.data(), &bi, DIB_RGB_COLORS);
       drawFeatureNames(memory);
       BitBlt(dc, r.left, r.top, shownSize, shownSize, memory, 0, 0, SRCCOPY);
       SelectObject(memory, old);
@@ -500,12 +508,35 @@ namespace
     haveGeometry = true;
     if (! mapsLoaded)
       return;
-    if (shownSize == pictureSize && ! shown.empty() && ! changedVisibly(geometry, shownGeometry, angle, shownAngle))
+    bool moonChanged = shownSize != pictureSize || shown.empty()
+                       || changedVisibly(geometry, shownGeometry, angle, shownAngle);
+    if (moonChanged) {
+      renderMoon(maps, geometry, pictureSize, angle, shown);
+      shownSize = pictureSize;
+      shownGeometry = geometry;
+      shownAngle = angle;
+    }
+
+    // The stars slide past much faster than the Moon's face changes: they're
+    // drawn again, over the same Moon, when they've moved half a pixel.
+    bool withStars = settings.stars && starCatalog.ok();
+    double moved = 0;
+    if (withStars && ! moonChanged) {
+      double c = geometry.toMoon.x * starsAt.x + geometry.toMoon.y * starsAt.y + geometry.toMoon.z * starsAt.z;
+      double pixelsPerDegree = pictureSize * 0.96 / 0.57;
+      moved = std::acos(std::max(-1.0, std::min(1.0, c))) * 57.29577951308232 * pixelsPerDegree
+              + std::fabs(angle - starsAngle) * 0.017453292519943295 * pictureSize / 2;
+    }
+    if (! moonChanged && ! (withStars && moved > 0.5) && picture.size() == shown.size())
       return;
-    renderMoon(maps, geometry, pictureSize, angle, shown);
-    shownSize = pictureSize;
-    shownGeometry = geometry;
-    shownAngle = angle;
+    picture = shown;
+    if (withStars) {
+      MoonGeometry view = shownGeometry;   // (the Moon as drawn, where it is among the stars now)
+      view.toMoon = geometry.toMoon;
+      drawStars(starCatalog, view, pictureSize, angle, picture);
+      starsAt = geometry.toMoon;
+      starsAngle = angle;
+    }
     RECT r = pictureRect();
     InvalidateRect(mainWindow, &r, FALSE);
   }
@@ -1065,6 +1096,16 @@ namespace
     InvalidateRect(mainWindow, &r, FALSE);
   }
 
+  void onStars()
+  {
+    settings.stars = ! settings.stars;
+    CheckMenuItem(viewMenu, ID_STARS, settings.stars ? MF_CHECKED : MF_UNCHECKED);
+    saveSettings(settings);
+    picture.clear();   // draw it again
+    if (haveGeometry)
+      showMoon(currentGeometry, currentAngle);
+  }
+
   void onDarkMode()
   {
     settings.darkMode = ! settings.darkMode;
@@ -1084,6 +1125,7 @@ namespace
       "Calculations: Astronomy Engine, (c) 2019-2023 Don Cross (MIT license).\n"
       "Moon maps: NASA's Scientific Visualization Studio (CGI Moon Kit), from the Lunar "
       "Reconnaissance Orbiter's LROC and LOLA teams.\n"
+      "Stars: the Tycho-2 catalogue (Hog et al. 2000), ESA's Hipparcos mission.\n"
       "Location: Windows location services, or ipinfo.io.");
     MessageBoxW(mainWindow, text.c_str(), L"About MoonInfo", MB_OK | MB_ICONINFORMATION);
   }
@@ -1124,6 +1166,10 @@ namespace
       "your horizon then, so you can see it. Next solar eclipse here: the next one visible from "
       "your location, with how much of the Sun is covered at its peak there (or \"at sunrise\" or "
       "\"at sunset\" if the Sun is below your horizon at the peak, so you see only part of it).\n\n"
+      "View > Stars behind the Moon: the stars the Moon is passing, where they really are (from "
+      "the Tycho-2 catalogue, to about magnitude 12; far more than its glare lets you see). The "
+      "picture is only a little wider than the Moon, so there are usually just a few; watch them "
+      "disappear behind the Moon with Play day.\n\n"
       "View > Names of the seas and craters: labels the picture (more names appear as the picture "
       "gets bigger).\n\n"
       "Parallactic angle: the angle between celestial north and straight up at the Moon. "
@@ -1150,6 +1196,7 @@ namespace
       case ID_DARK:     onDarkMode(); break;
       case ID_UNITS:    onUnits(); break;
       case ID_LABELS:   onLabels(); break;
+      case ID_STARS:    onStars(); break;
       case ID_PREVIOUS_DAY: onDayStep(-1); break;
       case ID_NEXT_DAY:     onDayStep(1); break;
       case ID_PLAY_DAY:
@@ -1363,6 +1410,7 @@ namespace
     auto checked = [](bool on) { return MF_STRING | (on ? MF_CHECKED : MF_UNCHECKED); };
     AppendMenuW(viewMenu, checked(settings.observerView), ID_VIEW, L"Moon &as seen from my location (unchecked: north up)");
     AppendMenuW(viewMenu, checked(settings.labels), ID_LABELS, L"&Names of the seas and craters on the picture");
+    AppendMenuW(viewMenu, checked(settings.stars), ID_STARS, L"&Stars behind the Moon");
     AppendMenuW(viewMenu, checked(settings.darkMode), ID_DARK, L"&Dark mode");
     AppendMenuW(viewMenu, checked(settings.imperial), ID_UNITS, L"&Miles and feet (unchecked: km and meters)");
     AppendMenuW(help, MF_STRING, ID_HELP, L"&Using MoonInfo");
@@ -1430,6 +1478,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int showCommand)
                           WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPCHILDREN,
                           0, 0, 10, 10, mainWindow, NULL, instance, NULL);
   mapsLoaded = loadMoonMaps(programFolder() + L"data\\", maps);
+  starCatalog.load(programFolder() + L"data\\moon_stars.bin");   // (without it, no stars)
   pictureSize = S(imageSize);
   createControls();
 

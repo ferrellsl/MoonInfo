@@ -26,7 +26,8 @@ configure_file ("${PROJECT_SOURCE_DIR}/src/config.h.in" "${PROJECT_BINARY_DIR}/c
 add_library (astronomy STATIC third_party/astronomy/astronomy.c third_party/astronomy/astronomy.h)
 target_include_directories (astronomy PUBLIC "${PROJECT_SOURCE_DIR}/third_party/astronomy")
 
-add_library (mooncalc STATIC src/MoonCalc.cpp src/MoonCalc.h src/MoonRender.cpp src/MoonRender.h)
+add_library (mooncalc STATIC src/MoonCalc.cpp src/MoonCalc.h src/MoonRender.cpp src/MoonRender.h
+                             src/Stars.cpp src/Stars.h)
 target_link_libraries (mooncalc PUBLIC astronomy)
 target_include_directories (mooncalc PUBLIC "${PROJECT_SOURCE_DIR}/src")
 

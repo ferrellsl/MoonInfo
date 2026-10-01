@@ -13,5 +13,13 @@ Moon maps (data/moon_color.jpg and data/moon_height.png) and the icon
   teams.  The icon is from NASA's "Moon Phase and Libration" imagery.  NASA
   imagery is not copyrighted; credit: NASA's Scientific Visualization Studio.
 
+Stars (data/moon_stars.bin)
+  The Tycho-2 catalogue (E. Hog et al., "The Tycho-2 Catalogue of the 2.5
+  Million Brightest Stars", Astronomy & Astrophysics 355, L27, 2000) and
+  its first supplement, from ESA's Hipparcos mission, obtained from the
+  VizieR catalogue service (CDS, Strasbourg, France; catalogue I/259): the
+  stars within 7.5 degrees of the ecliptic, with their positions,
+  magnitudes and colours.
+
 Everything else MoonInfo uses (the window and controls, reading the
 maps, the location service and the internet lookup) is part of Windows.

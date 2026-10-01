@@ -71,6 +71,34 @@ namespace mooninfo
     return positionOf(BODY_SUN, unixSeconds, where);
   }
 
+  Eclipses nextEclipses(double unixSeconds, const Observer & where)
+  {
+    Eclipses e;
+    astro_time_t time = timeFromUnix(unixSeconds);
+    astro_lunar_eclipse_t lunar = Astronomy_SearchLunarEclipse(time);
+    if (lunar.status == ASTRO_SUCCESS) {
+      e.lunarFound = true;
+      e.lunarPeak = unixFromTime(lunar.peak);
+      e.lunarKind = lunar.kind == ECLIPSE_TOTAL ? "total" : lunar.kind == ECLIPSE_PARTIAL ? "partial" : "penumbral";
+      e.lunarVisible = skyPosition(double(e.lunarPeak), where).altitude > 0;
+    }
+
+    astro_observer_t observer = Astronomy_MakeObserver(where.latitude, where.longitude, where.elevation);
+    astro_local_solar_eclipse_t solar = Astronomy_SearchLocalSolarEclipse(time, observer);
+    for (int i = 0; i < 20 && solar.status == ASTRO_SUCCESS; ++i) {
+      if (solar.peak.altitude > 0 || solar.partial_begin.altitude > 0 || solar.partial_end.altitude > 0) {
+        e.solarFound = true;
+        e.solarPeak = unixFromTime(solar.peak.time);
+        e.solarKind = solar.kind == ECLIPSE_TOTAL ? "total" : solar.kind == ECLIPSE_ANNULAR ? "annular" : "partial";
+        e.solarObscuration = solar.obscuration;
+        e.solarPeakSun = solar.peak.altitude > 0 ? 0 : solar.partial_end.altitude > 0 ? 1 : 2;
+        break;
+      }
+      solar = Astronomy_NextLocalSolarEclipse(solar.peak.time, observer);   // (the Sun is down for that one)
+    }
+    return e;
+  }
+
   std::vector<MoonQuarter> quartersBetween(double start, double end)
   {
     std::vector<MoonQuarter> found;

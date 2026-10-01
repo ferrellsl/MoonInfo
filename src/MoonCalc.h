@@ -60,6 +60,23 @@ namespace mooninfo
   SkyPosition skyPosition(double unixSeconds, const Observer & observer);
   SkyPosition sunPosition(double unixSeconds, const Observer & observer);
 
+  // The next eclipses after a time: of the Moon (anywhere on Earth's night
+  // side sees it), and of the Sun as seen from the observer's place.
+  struct Eclipses
+  {
+    bool lunarFound = false;
+    std::time_t lunarPeak = 0;
+    const char * lunarKind = "";      // "penumbral", "partial" or "total"
+    bool lunarVisible = false;        // the Moon is above the observer's horizon at the peak
+
+    bool solarFound = false;          // one whose peak, beginning or end has the Sun up here
+    std::time_t solarPeak = 0;
+    const char * solarKind = "";      // "partial", "annular" or "total"
+    double solarObscuration = 0;      // the fraction of the Sun's disc covered at the peak
+    int solarPeakSun = 0;             // 0: the Sun is up at the peak; 1: it rises during the eclipse; 2: it sets
+  };
+  Eclipses nextEclipses(double unixSeconds, const Observer & observer);
+
   // The new moons, quarters and full moons between two times (UTC seconds).
   std::vector<MoonQuarter> quartersBetween(double start, double end);
 

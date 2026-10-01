@@ -853,6 +853,27 @@ namespace
     setValue("libration", "longitude " + signedText(geometry.subEarthLon) + ", latitude " + signedText(geometry.subEarthLat));
     setValue("perigee", formatLocal(moon.perigee).substr(0, 16) + "  (" + distanceText(moon.perigeeDistance) + ")");
     setValue("apogee", formatLocal(moon.apogee).substr(0, 16) + "  (" + distanceText(moon.apogeeDistance) + ")");
+    // The next eclipses: found again when the day or the place changes, or
+    // one has passed.
+    {
+      static std::string key;
+      static Eclipses eclipses;
+      std::time_t dayStart, dayEnd;
+      localDay(when, dayStart, dayEnd);
+      std::string now_key = std::to_string(dayStart) + "|" + latText + "|" + lonText + "|" + elevText;
+      if (now_key != key || (eclipses.lunarFound && eclipses.lunarPeak < when)
+          || (eclipses.solarFound && eclipses.solarPeak < when)) {
+        eclipses = nextEclipses(double(when), where);
+        key = now_key;
+      }
+      setValue("lunarEclipse", ! eclipses.lunarFound ? std::string("none found")
+               : formatLocal(eclipses.lunarPeak).substr(0, 16) + "  " + eclipses.lunarKind
+                 + (eclipses.lunarVisible ? " (Moon up)" : " (Moon down)"));
+      setValue("solarEclipse", ! eclipses.solarFound ? std::string("none found")
+               : formatLocal(eclipses.solarPeak).substr(0, 16) + "  " + eclipses.solarKind + ", "
+                 + (eclipses.solarPeakSun == 0 ? fixed(eclipses.solarObscuration * 100, 0) + "% covered"
+                    : eclipses.solarPeakSun == 1 ? std::string("at sunrise") : std::string("at sunset")));
+    }
     showMoon(geometry, observerView ? moon.parallactic : 0);
     SkyPosition position;
     position.azimuth = moon.azimuth;
@@ -1099,6 +1120,10 @@ namespace
       "Age: days since the last new moon. Libration: how far the Moon is turned, east-west and "
       "north-south, from facing us squarely. Perigee and apogee: when the Moon is next nearest and "
       "farthest. A full moon closer than 367,600 km (228,400 miles) is marked as a supermoon.\n\n"
+      "Next lunar eclipse: the time of its peak and its kind; \"Moon up\" means the Moon is above "
+      "your horizon then, so you can see it. Next solar eclipse here: the next one visible from "
+      "your location, with how much of the Sun is covered at its peak there (or \"at sunrise\" or "
+      "\"at sunset\" if the Sun is below your horizon at the peak, so you see only part of it).\n\n"
       "View > Names of the seas and craters: labels the picture (more names appear as the picture "
       "gets bigger).\n\n"
       "Parallactic angle: the angle between celestial north and straight up at the Moon. "
@@ -1299,6 +1324,8 @@ namespace
     addValue(y, "Libration:", "libration");           y += rowHeight;
     addValue(y, "Next perigee:", "perigee");          y += rowHeight;
     addValue(y, "Next apogee:", "apogee");            y += rowHeight;
+    addValue(y, "Next lunar eclipse:", "lunarEclipse");   y += rowHeight;
+    addValue(y, "Next solar eclipse here:", "solarEclipse");   y += rowHeight;
     problemLabel = makeControl(panel, L"STATIC", "", SS_LEFT, margin, y + 5, panelWidth - 2 * margin, 2 * rowHeight);
     y += 2 * rowHeight;
 

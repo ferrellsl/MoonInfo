@@ -44,10 +44,11 @@ target_link_libraries (mooninfo-test mooncalc winhttp windowsapp ole32 windowsco
 set (MOONINFO_RES_DIR "${PROJECT_SOURCE_DIR}/res")
 configure_file ("${PROJECT_SOURCE_DIR}/res/MoonInfo.rc.in" "${PROJECT_BINARY_DIR}/MoonInfo.rc" @ONLY)
 
-add_executable (MoonInfo WIN32 src/MoonInfo.cpp src/Location.cpp src/Location.h res/resource.h
+add_executable (MoonInfo WIN32 src/MoonInfo.cpp src/Location.cpp src/Location.h src/SkyCharts.cpp
+                              src/SkyCharts.h res/resource.h
                               "${PROJECT_BINARY_DIR}/MoonInfo.rc" res/MoonInfo.manifest)
 target_include_directories (MoonInfo PRIVATE "${PROJECT_SOURCE_DIR}/res" "${PROJECT_BINARY_DIR}")
-target_link_libraries (MoonInfo mooncalc user32 gdi32 comctl32 ole32 windowscodecs uxtheme dwmapi
+target_link_libraries (MoonInfo mooncalc user32 gdi32 gdiplus comctl32 ole32 windowscodecs uxtheme dwmapi
                        advapi32 winhttp windowsapp)
 
 #  NASA's Moon maps beside the program, in data\ (moon_color.jpg and

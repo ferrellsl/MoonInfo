@@ -55,6 +55,18 @@ namespace mooninfo
     return "Waning Crescent";
   }
 
+  SkyPosition skyPosition(double unixSeconds, const Observer & where)
+  {
+    astro_time_t time = timeFromUnix(unixSeconds);
+    astro_observer_t observer = Astronomy_MakeObserver(where.latitude, where.longitude, where.elevation);
+    astro_equatorial_t equDate = Astronomy_Equator(BODY_MOON, &time, observer, EQUATOR_OF_DATE, ABERRATION);
+    astro_horizon_t hor = Astronomy_Horizon(&time, observer, equDate.ra, equDate.dec, REFRACTION_NORMAL);
+    SkyPosition p;
+    p.azimuth = hor.azimuth;
+    p.altitude = hor.altitude;
+    return p;
+  }
+
   MoonInfo calculate(double unixSeconds, const Observer & where)
   {
     MoonInfo info;

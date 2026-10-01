@@ -40,6 +40,14 @@ namespace mooninfo
   // Everything for the given time (UTC seconds) and place.
   MoonInfo calculate(double unixSeconds, const Observer & observer);
 
+  // Where the Moon is in the sky (degrees; altitude with refraction), as in
+  // calculate(), for drawing its path through a day.
+  struct SkyPosition
+  {
+    double azimuth = 0, altitude = 0;
+  };
+  SkyPosition skyPosition(double unixSeconds, const Observer & observer);
+
   const char * quarterName(int quarter);
 
   // "Waxing Crescent", "First Quarter", ... "Waning Crescent": the principal

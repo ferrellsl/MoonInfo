@@ -1,8 +1,9 @@
 // MoonInfo: the Moon Info website as a Windows program.
 //
 // Shows the Moon's phase, illumination, distance, rise and set, the next
-// quarters, its position and a picture of it, turned to look as it does
-// from the observer's location (or north up).  Plain Win32: the data are in
+// quarters, its position, charts of its path through the day, and a picture
+// of it, turned to look as it does from the observer's location (or north
+// up).  Plain Win32: the data are in
 // a scrolling panel on the left, the picture (decoded with WIC) on the
 // right.  The calculations are in MoonCalc.cpp and finding the location in
 // Location.cpp.  (It also runs under Wine on Linux and macOS.)
@@ -35,6 +36,7 @@
 #include "Location.h"
 #include "MoonCalc.h"
 #include "MoonRender.h"
+#include "SkyCharts.h"
 #include "config.h"
 #include "resource.h"
 
@@ -463,6 +465,90 @@ namespace
   int clientHeightFor(int clientWidth) { return clientWidth - S(imageX) + S(margin); }
 
   //--------------------------------------------------------------------------
+  // The charts of the Moon's path through the day (SkyCharts.cpp)
+  //--------------------------------------------------------------------------
+
+  HWND altitudeChart, horizonChart;
+  DayTrack chartTrack;              // the shown day's path
+  std::string chartTrackKey;        // the day and place it was calculated for
+  bool chartShowNow = false;
+  double chartNow = 0;
+  SkyPosition chartCurrent;
+
+  // The day (local midnight to midnight) containing a time.
+  void localDay(std::time_t when, std::time_t & start, std::time_t & end)
+  {
+    std::tm local;
+    localtime_s(&local, &when);
+    local.tm_hour = local.tm_min = local.tm_sec = 0;
+    local.tm_isdst = -1;
+    start = std::mktime(&local);
+    local.tm_mday += 1;
+    local.tm_hour = local.tm_min = local.tm_sec = 0;
+    local.tm_isdst = -1;
+    end = std::mktime(&local);
+  }
+
+  // The charts for a time and place (recalculating the day's path when the
+  // day or the place changes).
+  void updateCharts(std::time_t when, const Observer & where, const SkyPosition & now)
+  {
+    std::time_t start, end;
+    localDay(when, start, end);
+    std::string key = std::to_string(start) + "|" + fixed(where.latitude, 6) + "|" + fixed(where.longitude, 6)
+                      + "|" + fixed(where.elevation, 1);
+    if (key != chartTrackKey) {
+      chartTrack = dayTrack(double(start), double(end), where);
+      chartTrackKey = key;
+    }
+    chartShowNow = true;
+    chartNow = double(when);
+    chartCurrent = now;
+    InvalidateRect(altitudeChart, NULL, FALSE);
+    InvalidateRect(horizonChart, NULL, FALSE);
+  }
+
+  void clearCharts()
+  {
+    chartTrack = DayTrack();
+    chartTrackKey.clear();
+    chartShowNow = false;
+    InvalidateRect(altitudeChart, NULL, FALSE);
+    InvalidateRect(horizonChart, NULL, FALSE);
+  }
+
+  // Painted into a bitmap first, so the once-a-second updates don't flicker.
+  void paintChart(HWND hwnd)
+  {
+    PAINTSTRUCT ps;
+    HDC dc = BeginPaint(hwnd, &ps);
+    RECT r;
+    GetClientRect(hwnd, &r);
+    HDC memory = CreateCompatibleDC(dc);
+    HBITMAP bitmap = CreateCompatibleBitmap(dc, r.right, r.bottom);
+    HGDIOBJ old = SelectObject(memory, bitmap);
+    ChartColours colours = chartColours(settings.darkMode);
+    if (hwnd == altitudeChart)
+      drawAltitudeChart(memory, r, chartTrack, chartShowNow, chartNow, chartCurrent, colours, font, dpiScale);
+    else
+      drawHorizonChart(memory, r, chartTrack, chartShowNow, chartCurrent, colours, font, dpiScale);
+    BitBlt(dc, 0, 0, r.right, r.bottom, memory, 0, 0, SRCCOPY);
+    SelectObject(memory, old);
+    DeleteObject(bitmap);
+    DeleteDC(memory);
+    EndPaint(hwnd, &ps);
+  }
+
+  LRESULT CALLBACK chartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+  {
+    switch (msg) {
+      case WM_PAINT:      paintChart(hwnd); return 0;
+      case WM_ERASEBKGND: return 1;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+  }
+
+  //--------------------------------------------------------------------------
   // Finding the location (on a worker thread)
   //--------------------------------------------------------------------------
 
@@ -550,6 +636,7 @@ namespace
       for (auto & v : values)
         setText(v.second, "");
       setText(problemLabel, "Check the date and time (YYYY-MM-DD HH:MM:SS) and the coordinates.");
+      clearCharts();
       return;
     }
     if (settings.imperial)
@@ -590,6 +677,10 @@ namespace
     setValue("ra", fixed(moon.ra, 2) + " h");
     setValue("dec", fixed(moon.dec, 2) + degree);
     showMoon(moonGeometry(double(when), where), observerView ? moon.parallactic : 0);
+    SkyPosition position;
+    position.azimuth = moon.azimuth;
+    position.altitude = moon.altitude;
+    updateCharts(when, where, position);
   }
 
   //--------------------------------------------------------------------------
@@ -731,6 +822,9 @@ namespace
       "The picture is drawn from NASA's Lunar Reconnaissance Orbiter maps for the date, time "
       "and place: the exact phase, the libration and tilt, the apparent size (which changes "
       "with the Moon's distance) and earthshine on the dark side.\n\n"
+      "The charts below the data show the Moon's path through the day (midnight to midnight): "
+      "its altitude by the hour, and its altitude by direction (east at the left, through "
+      "south, west and north). The shaded part is below the horizon; the dot is the Moon now.\n\n"
       "Parallactic angle: the angle between celestial north and straight up at the Moon. "
       "With View > \"Moon as seen from my location\" checked, the picture is turned by it so it's tilted as "
       "the Moon appears in your sky (roughly upside down in the southern hemisphere); "
@@ -892,6 +986,17 @@ namespace
     addValue(y, "Dec (J2000):", "dec");               y += rowHeight;
     problemLabel = makeControl(panel, L"STATIC", "", SS_LEFT, margin, y + 5, panelWidth - 2 * margin, 2 * rowHeight);
     y += 2 * rowHeight;
+
+    // The charts of the day's path, the width of the column.
+    const int chartHeight = 190;
+    addLabel(panel, margin, y, panelWidth - 2 * margin, "Altitude through the day:");
+    y += rowHeight;
+    altitudeChart = makeControl(panel, L"MoonInfoChart", "", 0, margin, y, panelWidth - 2 * margin, chartHeight);
+    y += chartHeight + 10;
+    addLabel(panel, margin, y, panelWidth - 2 * margin, "Path across the sky (altitude by direction):");
+    y += rowHeight;
+    horizonChart = makeControl(panel, L"MoonInfoChart", "", 0, margin, y, panelWidth - 2 * margin, chartHeight);
+    y += chartHeight;
     contentHeight = y + margin;
 
     check(autoCheck, settings.automatic);
@@ -953,6 +1058,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int showCommand)
   pc.hCursor = LoadCursor(NULL, IDC_ARROW);
   pc.lpszClassName = L"MoonInfoPanel";
   RegisterClassExW(&pc);
+  WNDCLASSEXW cc = { sizeof cc };
+  cc.lpfnWndProc = chartProc;
+  cc.hInstance = instance;
+  cc.hCursor = LoadCursor(NULL, IDC_ARROW);
+  cc.lpszClassName = L"MoonInfoChart";
+  RegisterClassExW(&cc);
+  startCharts();
 
   // The window: the data column (with its scroll bar), then the picture.
   imageX = panelWidth + (int) (GetSystemMetrics(SM_CXVSCROLL) / dpiScale + 0.5) + 12;
@@ -975,8 +1087,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int showCommand)
   RECT frame = { 0, 0, 0, 0 };
   AdjustWindowRectEx(&frame, WS_OVERLAPPEDWINDOW, TRUE, WS_EX_CONTROLPARENT);
   int clientH = std::min<int>(S(contentHeight), (work.bottom - work.top) - (frame.bottom - frame.top));
-  SetWindowPos(mainWindow, NULL, 0, 0, clientWidthFor(clientH) + (frame.right - frame.left),
-               clientH + (frame.bottom - frame.top), SWP_NOMOVE | SWP_NOZORDER);
+  int windowW = clientWidthFor(clientH) + (frame.right - frame.left), windowH = clientH + (frame.bottom - frame.top);
+  RECT placed;
+  GetWindowRect(mainWindow, &placed);
+  // Moved up and left if it would run off the screen (the column is taller
+  // with the charts).
+  int left = std::max<int>(work.left, std::min<int>(placed.left, work.right - windowW));
+  int top = std::max<int>(work.top, std::min<int>(placed.top, work.bottom - windowH));
+  SetWindowPos(mainWindow, NULL, left, top, windowW, windowH, SWP_NOZORDER);
   fitPicture();
   applyTheme(settings.darkMode);
 
@@ -1000,6 +1118,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int showCommand)
   }
   if (locator.joinable())
     locator.join();
+  stopCharts();
   CoUninitialize();
   return 0;
 }

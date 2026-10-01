@@ -668,6 +668,9 @@ namespace
     setValue("moonrise", moon.riseFound ? formatLocal(moon.rise) : "none within 300 days");
     setValue("moonset", moon.setFound ? formatLocal(moon.set) : "none within 300 days");
     for (int i = 0; i < 4; ++i) {
+      // (The next four quarters always include one new and one full moon.)
+      if (moon.quarters[i].quarter == 0) setValue("nextNew", formatLocal(moon.quarters[i].time));
+      if (moon.quarters[i].quarter == 2) setValue("nextFull", formatLocal(moon.quarters[i].time));
       setValue(("quarterName" + std::to_string(i)).c_str(), std::string(quarterName(moon.quarters[i].quarter)) + ":");
       setValue(("quarterTime" + std::to_string(i)).c_str(), formatLocal(moon.quarters[i].time));
     }
@@ -973,6 +976,8 @@ namespace
     addValue(y, "Distance:", "distance");             y += rowHeight;
     addValue(y, "Moonrise:", "moonrise");             y += rowHeight;
     addValue(y, "Moonset:", "moonset");               y += rowHeight;
+    addValue(y, "Next new moon:", "nextNew");         y += rowHeight;
+    addValue(y, "Next full moon:", "nextFull");       y += rowHeight;
     for (int i = 0; i < 4; ++i) {
       std::string n = std::to_string(i);
       values["quarterName" + n] = addLabel(panel, margin, y, labelWidth, "");

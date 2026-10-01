@@ -11,7 +11,7 @@ page.
 
 ## Download
 
-Get **MoonInfo-2.3-win64.zip** from the
+Get **MoonInfo-2.4-win64.zip** from the
 [Releases page](../../releases) and unzip it anywhere:
 
     MoonInfo.exe   the program (no installation; no DLLs needed)
@@ -28,9 +28,10 @@ it finds the location from your internet address).
   `YYYY-MM-DD HH:MM:SS`.
 - **Time of day, < Day, Day >, Play day, Play month:** drag the slider to
   another time on the day shown, step a day back or forward, or run the time
-  forward (a day in about six seconds, a month in about fifteen) and watch
-  the Moon move, turn and change phase. The same button stops it; check
-  *Automatic* to return to now.
+  forward (a day in about six seconds, a month in about thirty) and watch
+  the Moon move, turn and change phase. The same button stops it; *Play
+  speed* makes it up to four times slower or faster. Check *Automatic* to
+  return to now.
 - **Location:** on the first run MoonInfo finds your location, and *Use My
   Location* finds it again. It asks Windows' location service first (if it's
   turned on for desktop apps in Settings > Privacy > Location), then, if

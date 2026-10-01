@@ -181,6 +181,7 @@ namespace
     bool imperial = false;          // elevation in feet, distance in miles (else metres, km)
     bool labels = false;            // name the seas and craters on the picture
     bool stars = true;              // the stars behind the Moon
+    int playSpeed = 2;              // 0 - 4: a quarter, a half, 1, 2 and 4 times the usual speed
     bool stored = false;            // read from the settings file
   };
 
@@ -215,6 +216,8 @@ namespace
       else if (key == "imperial")                                  s.imperial = value != "0";
       else if (key == "labels")                                    s.labels = value != "0";
       else if (key == "stars")                                     s.stars = value != "0";
+      else if (key == "playSpeed" && parseNumber(value, number))
+        s.playSpeed = std::max(0, std::min(4, int(number)));
     }
     return s;
   }
@@ -226,7 +229,7 @@ namespace
         << "\ndate=" << s.date << "\nautomatic=" << (s.automatic ? 1 : 0)
         << "\nobserverView=" << (s.observerView ? 1 : 0) << "\ndarkMode=" << (s.darkMode ? 1 : 0)
         << "\nimperial=" << (s.imperial ? 1 : 0) << "\nlabels=" << (s.labels ? 1 : 0) << "\nstars=" << (s.stars ? 1 : 0)
-        << "\n";
+        << "\nplaySpeed=" << s.playSpeed << "\n";
   }
 
   //--------------------------------------------------------------------------
@@ -243,6 +246,7 @@ namespace
   HWND latEdit, lonEdit, elevEdit, elevLabel;
   HWND problemLabel;
   HWND timeSlider, playDayButton, playMonthButton;   // moving through time
+  HWND speedSlider, speedLabel;
   HMENU viewMenu;                  // the View menu's options
   std::map<std::string, HWND> values;   // the results, by name
 
@@ -351,13 +355,15 @@ namespace
     SetWindowTheme(panel, dark ? L"DarkMode_Explorer" : L"Explorer", NULL);   // its scroll bar
     EnumChildWindows(mainWindow, themeChild, dark ? 1 : 0);
     setTitleBar(dark);
-    if (timeSlider) {
-      // The slider keeps a picture of its background: resizing it makes a new one.
+    for (HWND slider : { timeSlider, speedSlider }) {
+      if (! slider)
+        continue;
+      // A slider keeps a picture of its background: resizing it makes a new one.
       RECT r;
-      GetWindowRect(timeSlider, &r);
+      GetWindowRect(slider, &r);
       MapWindowPoints(NULL, panel, (POINT *) &r, 2);
-      MoveWindow(timeSlider, r.left, r.top, r.right - r.left + 1, r.bottom - r.top, FALSE);
-      MoveWindow(timeSlider, r.left, r.top, r.right - r.left, r.bottom - r.top, FALSE);
+      MoveWindow(slider, r.left, r.top, r.right - r.left + 1, r.bottom - r.top, FALSE);
+      MoveWindow(slider, r.left, r.top, r.right - r.left, r.bottom - r.top, FALSE);
     }
     RedrawWindow(mainWindow, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
   }
@@ -948,8 +954,31 @@ namespace
     setManualTime(std::mktime(&local));
   }
 
+  // The play speed's slider: how long a day and a month take at each setting.
+  const double speedFactors[5] = { 0.25, 0.5, 1, 2, 4 };
+  const double daySeconds = 6, monthSeconds = 30;   // at the middle setting
+
+  void showSpeed()
+  {
+    auto text = [](double seconds) {
+      return seconds >= 90 ? fixed(seconds / 60, 0) + " min" : fixed(seconds, seconds < 10 ? 1 : 0) + " s";
+    };
+    double f = speedFactors[settings.playSpeed];
+    setText(speedLabel, "day " + text(daySeconds / f) + ", month " + text(monthSeconds / f));
+  }
+
+  void onSpeedSlider()
+  {
+    int speed = std::max(0, std::min(4, (int) SendMessageW(speedSlider, TBM_GETPOS, 0, 0)));
+    if (speed == settings.playSpeed)
+      return;
+    settings.playSpeed = speed;
+    saveSettings(settings);
+    showSpeed();
+  }
+
   // Run the time forward: a day in about six seconds, or a month in about
-  // fifteen.  The same button stops it.
+  // thirty, at the middle speed.  The same button stops it.
   void onPlay(int which)
   {
     bool stop = playing == which;
@@ -968,7 +997,10 @@ namespace
   {
     if (! playing)
       return;
-    playTime += playing == ID_PLAY_DAY ? 600 : 7200;   // seconds of the Moon's time each frame
+    // The Moon's time that passes in each frame (25 frames a second).
+    const double frames = 25;
+    double step = playing == ID_PLAY_DAY ? 86400 / (daySeconds * frames) : 30 * 86400 / (monthSeconds * frames);
+    playTime += step * speedFactors[settings.playSpeed];
     setText(dateEdit, formatLocal((std::time_t) playTime));
     update();
   }
@@ -1137,8 +1169,9 @@ namespace
       "unchecked, type a local date and time, YYYY-MM-DD HH:MM:SS.\n\n"
       "Time of day: drag the slider to another time on the day shown. \"< Day\" and \"Day >\" "
       "go back and forward a day. \"Play day\" and \"Play month\" run the time forward (a day in "
-      "about six seconds, a month in about fifteen) so you can watch the Moon move, turn and "
-      "change phase; the same button stops it. Check Automatic to return to now.\n\n"
+      "about six seconds, a month in about thirty) so you can watch the Moon move, turn and "
+      "change phase; the same button stops it. Play speed makes them slower (to the left) or faster; "
+      "the times beside it are how long a day and a month take. Check Automatic to return to now.\n\n"
       "Location: \"Use My Location\" asks Windows' location service (if it's turned on for "
       "desktop apps in Windows' privacy settings), or failing that, looks up the approximate "
       "location of your internet address. Or type the latitude and longitude (degrees; north "
@@ -1226,6 +1259,8 @@ namespace
       case WM_HSCROLL:
         if ((HWND) lp == timeSlider)
           onTimeSlider();
+        else if ((HWND) lp == speedSlider)
+          onSpeedSlider();
         return 0;
       case WM_MOUSEWHEEL:     onWheel(wp); return 0;
       case WM_SIZE:           setScrollRange(); return 0;
@@ -1329,7 +1364,16 @@ namespace
       playMonthButton = makeControl(panel, L"BUTTON", "Play month", WS_TABSTOP | BS_PUSHBUTTON, margin + 3 * (w + 8), y, w,
                                     rowHeight, ID_PLAY_MONTH);
     }
-    y += 36;
+    y += 34;
+    addLabel(panel, margin, y, labelWidth, "Play speed:");
+    speedSlider = makeControl(panel, TRACKBAR_CLASSW, "", WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS, valueX - 6, y, 112,
+                              rowHeight + 4);
+    SendMessageW(speedSlider, TBM_SETRANGE, FALSE, MAKELPARAM(0, 4));
+    SendMessageW(speedSlider, TBM_SETPAGESIZE, 0, 1);
+    SendMessageW(speedSlider, TBM_SETPOS, TRUE, settings.playSpeed);
+    speedLabel = addLabel(panel, valueX + 114, y, valueWidth - 114, "");
+    showSpeed();
+    y += 38;
     addLabel(panel, margin, y, labelWidth, "Location:");
     locationButton = makeControl(panel, L"BUTTON", "Use My Location", WS_TABSTOP | BS_PUSHBUTTON, valueX, y, 140,
                                  rowHeight, ID_LOCATION);

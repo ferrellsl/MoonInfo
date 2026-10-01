@@ -10,7 +10,7 @@ page.
 
 ## Download
 
-Get **MoonInfo-2.1-win64.zip** from the
+Get **MoonInfo-2.2-win64.zip** from the
 [Releases page](../../releases) and unzip it anywhere:
 
     MoonInfo.exe   the program (no installation; no DLLs needed)
@@ -38,7 +38,10 @@ it finds the location from your internet address).
 - **Charts:** at the bottom of the data column, the Moon's path through the
   day (midnight to midnight): its altitude by the hour, and its altitude by
   direction (east at the left, through south, west and north). The shaded
-  part is below the horizon, and the dot is the Moon now.
+  part is below the horizon, and the dot is the Moon now. The small circles
+  mark that day's moonrise (up arrow) and moonset (down arrow), with their
+  times. (The Moonrise and Moonset rows show the next ones from now, which
+  may be tomorrow's.)
 - **Picture:** drawn from NASA's Lunar Reconnaissance Orbiter maps (the LROC
   color mosaic and LOLA elevations) for the date, time and place: the exact
   phase, lit from the Sun's direction, with the relief shaded near the

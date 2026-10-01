@@ -178,6 +178,7 @@ namespace
     bool observerView = true;       // turn the picture as seen from here
     bool darkMode = false;          // (first run: as Windows' app theme)
     bool imperial = false;          // elevation in feet, distance in miles (else metres, km)
+    bool labels = false;            // name the seas and craters on the picture
     bool stored = false;            // read from the settings file
   };
 
@@ -210,6 +211,7 @@ namespace
       else if (key == "observerView")                              s.observerView = value != "0";
       else if (key == "darkMode")                                  s.darkMode = value != "0";
       else if (key == "imperial")                                  s.imperial = value != "0";
+      else if (key == "labels")                                    s.labels = value != "0";
     }
     return s;
   }
@@ -220,7 +222,7 @@ namespace
     out << "latitude=" << s.latitude << "\nlongitude=" << s.longitude << "\nelevation=" << s.elevation
         << "\ndate=" << s.date << "\nautomatic=" << (s.automatic ? 1 : 0)
         << "\nobserverView=" << (s.observerView ? 1 : 0) << "\ndarkMode=" << (s.darkMode ? 1 : 0)
-        << "\nimperial=" << (s.imperial ? 1 : 0) << "\n";
+        << "\nimperial=" << (s.imperial ? 1 : 0) << "\nlabels=" << (s.labels ? 1 : 0) << "\n";
   }
 
   //--------------------------------------------------------------------------
@@ -236,12 +238,14 @@ namespace
   HWND dateEdit, autoCheck, locationButton, locationStatus;
   HWND latEdit, lonEdit, elevEdit, elevLabel;
   HWND problemLabel;
+  HWND timeSlider, playDayButton, playMonthButton;   // moving through time
   HMENU viewMenu;                  // the View menu's options
   std::map<std::string, HWND> values;   // the results, by name
 
-  enum { ID_AUTO = 100, ID_LOCATION, ID_VIEW, ID_DARK, ID_UNITS, ID_EXIT, ID_HELP, ID_ABOUT };
+  enum { ID_AUTO = 100, ID_LOCATION, ID_VIEW, ID_DARK, ID_UNITS, ID_EXIT, ID_HELP, ID_ABOUT,
+         ID_LABELS, ID_PREVIOUS_DAY, ID_NEXT_DAY, ID_PLAY_DAY, ID_PLAY_MONTH };
   const UINT WM_LOCATED = WM_APP + 1;   // the location worker has finished
-  const UINT_PTR TIMER_ID = 1;
+  const UINT_PTR TIMER_ID = 1, TIMER_PLAY = 2;
 
   // Layout, in unscaled (96 dpi) pixels.
   const int margin = 12, labelWidth = 150, valueX = margin + labelWidth, valueWidth = 270, rowHeight = 26;
@@ -343,6 +347,14 @@ namespace
     SetWindowTheme(panel, dark ? L"DarkMode_Explorer" : L"Explorer", NULL);   // its scroll bar
     EnumChildWindows(mainWindow, themeChild, dark ? 1 : 0);
     setTitleBar(dark);
+    if (timeSlider) {
+      // The slider keeps a picture of its background: resizing it makes a new one.
+      RECT r;
+      GetWindowRect(timeSlider, &r);
+      MapWindowPoints(NULL, panel, (POINT *) &r, 2);
+      MoveWindow(timeSlider, r.left, r.top, r.right - r.left + 1, r.bottom - r.top, FALSE);
+      MoveWindow(timeSlider, r.left, r.top, r.right - r.left, r.bottom - r.top, FALSE);
+    }
     RedrawWindow(mainWindow, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
   }
 
@@ -382,10 +394,55 @@ namespace
     return r;
   }
 
+  // The seas and the best-known craters (selenographic longitude, east
+  // positive, and latitude; degrees).  The craters are named only when the
+  // picture is big enough for them.
+  struct Feature { const wchar_t * name; double longitude, latitude; bool major; };
+  const Feature features[] = {
+    { L"Mare Imbrium", -15.6, 32.8, true },         { L"Mare Serenitatis", 17.5, 28.0, true },
+    { L"Mare Tranquillitatis", 31.4, 8.5, true },   { L"Mare Crisium", 59.1, 17.0, true },
+    { L"Mare Fecunditatis", 51.3, -7.8, true },     { L"Mare Nectaris", 34.6, -15.2, true },
+    { L"Mare Nubium", -16.6, -21.3, true },         { L"Mare Humorum", -38.6, -24.4, true },
+    { L"Oceanus Procellarum", -57.4, 18.4, true },  { L"Mare Frigoris", 1.4, 56.0, true },
+    { L"Mare Vaporum", 3.6, 13.3, false },          { L"Mare Cognitum", -23.1, -10.0, false },
+    { L"Tycho", -11.4, -43.3, true },               { L"Copernicus", -20.1, 9.6, true },
+    { L"Kepler", -38.0, 8.1, false },               { L"Aristarchus", -47.4, 23.7, false },
+    { L"Plato", -9.4, 51.6, false },                { L"Clavius", -14.4, -58.4, false },
+    { L"Ptolemaeus", -1.8, -9.2, false },           { L"Langrenus", 61.0, -8.9, false },
+    { L"Grimaldi", -68.6, -5.2, false },            { L"Archimedes", -4.0, 29.7, false },
+    { L"Eratosthenes", -11.3, 14.5, false },        { L"Theophilus", 26.4, -11.4, false },
+    { L"Posidonius", 29.9, 31.8, false },           { L"Gassendi", -39.9, -17.5, false },
+    { L"Petavius", 60.4, -25.3, false },            { L"Aristoteles", 17.4, 50.2, false },
+    { L"Apollo 11", 23.47, 0.67, false },
+  };
+
+  // The names, over the picture in a bitmap of its size.
+  void drawFeatureNames(HDC dc)
+  {
+    bool all = shownSize >= S(520);
+    HFONT old = (HFONT) SelectObject(dc, font);
+    SetBkMode(dc, TRANSPARENT);
+    for (const Feature & f : features) {
+      double x, y;
+      if ((! f.major && ! all) || ! projectToPicture(shownGeometry, shownSize, shownAngle, f.longitude, f.latitude, x, y))
+        continue;
+      RECT at = { (LONG) x, (LONG) y, (LONG) x, (LONG) y };
+      const UINT format = DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX;
+      for (int dx = -1; dx <= 1; ++dx)        // a dark edge, to read on bright ground
+        for (int dy = -1; dy <= 1; ++dy) {
+          RECT edge = { at.left + dx, at.top + dy, at.right + dx, at.bottom + dy };
+          SetTextColor(dc, RGB(0, 0, 0));
+          DrawTextW(dc, f.name, -1, &edge, format);
+        }
+      SetTextColor(dc, RGB(255, 244, 190));
+      DrawTextW(dc, f.name, -1, &at, format);
+    }
+    SelectObject(dc, old);
+  }
+
   void paintPicture(HDC dc)
   {
     RECT r = pictureRect();
-    FillRect(dc, &r, (HBRUSH) GetStockObject(BLACK_BRUSH));
     if (! shown.empty() && shownSize == pictureSize) {
       BITMAPINFO bi = {};
       bi.bmiHeader.biSize = sizeof bi.bmiHeader;
@@ -394,10 +451,25 @@ namespace
       bi.bmiHeader.biPlanes = 1;
       bi.bmiHeader.biBitCount = 32;
       bi.bmiHeader.biCompression = BI_RGB;
-      SetDIBitsToDevice(dc, r.left, r.top, shownSize, shownSize, 0, 0, 0, shownSize,
-                        shown.data(), &bi, DIB_RGB_COLORS);
+      if (! settings.labels) {
+        SetDIBitsToDevice(dc, r.left, r.top, shownSize, shownSize, 0, 0, 0, shownSize,
+                          shown.data(), &bi, DIB_RGB_COLORS);
+        return;
+      }
+      // With the names: put together in a bitmap first, so they don't flicker.
+      HDC memory = CreateCompatibleDC(dc);
+      HBITMAP bitmap = CreateCompatibleBitmap(dc, shownSize, shownSize);
+      HGDIOBJ old = SelectObject(memory, bitmap);
+      SetDIBitsToDevice(memory, 0, 0, shownSize, shownSize, 0, 0, 0, shownSize, shown.data(), &bi, DIB_RGB_COLORS);
+      drawFeatureNames(memory);
+      BitBlt(dc, r.left, r.top, shownSize, shownSize, memory, 0, 0, SRCCOPY);
+      SelectObject(memory, old);
+      DeleteObject(bitmap);
+      DeleteDC(memory);
+      return;
     }
-    else if (! mapsLoaded) {
+    FillRect(dc, &r, (HBRUSH) GetStockObject(BLACK_BRUSH));
+    if (! mapsLoaded) {
       SetTextColor(dc, RGB(200, 200, 200));
       SetBkMode(dc, TRANSPARENT);
       HFONT old = (HFONT) SelectObject(dc, font);
@@ -468,7 +540,16 @@ namespace
   // The charts of the Moon's path through the day (SkyCharts.cpp)
   //--------------------------------------------------------------------------
 
-  HWND altitudeChart, horizonChart;
+  void update();
+  void setManualTime(std::time_t when);
+
+  HWND altitudeChart, horizonChart, skyDome, calendarView;
+  CalendarMonth calendar;           // the month the calendar shows
+  int calendarYear = 0, calendarMonthNumber = 0;
+  int shownYear = 0, shownMonth = 0, shownDay = 0;   // the date the data are for
+  std::time_t shownTime = 0;
+  bool calendarMirrored = false;
+  std::string calendarKey;          // what it last drew
   DayTrack chartTrack;              // the shown day's path
   std::string chartTrackKey;        // the day and place it was calculated for
   bool chartShowNow = false;
@@ -489,6 +570,54 @@ namespace
     end = std::mktime(&local);
   }
 
+  // The calendar's month, with the shown day and today marked; redrawn
+  // only when something in it changes.
+  void showCalendar()
+  {
+    if (calendarYear == 0)
+      return;
+    if (calendar.year != calendarYear || calendar.month != calendarMonthNumber)
+      calendar = calendarMonth(calendarYear, calendarMonthNumber);
+    calendar.selected = calendarYear == shownYear && calendarMonthNumber == shownMonth ? shownDay : 0;
+    std::time_t now = std::time(NULL);
+    std::tm today;
+    localtime_s(&today, &now);
+    calendar.today = today.tm_year + 1900 == calendarYear && today.tm_mon + 1 == calendarMonthNumber ? today.tm_mday : 0;
+    std::string key = std::to_string(calendarYear) + "-" + std::to_string(calendarMonthNumber) + "-"
+                      + std::to_string(calendar.selected) + "-" + std::to_string(calendar.today)
+                      + (calendarMirrored ? "m" : "n") + (settings.darkMode ? "d" : "l");
+    if (key != calendarKey) {
+      calendarKey = key;
+      InvalidateRect(calendarView, NULL, FALSE);
+    }
+  }
+
+  // A click in the calendar: a day shows that day (at the time of day
+  // shown); the arrows show the month before or after.
+  void onCalendarClick(HWND hwnd, LPARAM lp)
+  {
+    RECT r;
+    GetClientRect(hwnd, &r);
+    POINT point = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+    int hit = calendarHit(r, calendar, point, dpiScale);
+    if (hit == calendarPrevious || hit == calendarNext) {
+      calendarMonthNumber += hit == calendarNext ? 1 : -1;
+      if (calendarMonthNumber < 1)  { calendarMonthNumber = 12; calendarYear--; }
+      if (calendarMonthNumber > 12) { calendarMonthNumber = 1;  calendarYear++; }
+      showCalendar();
+    }
+    else if (hit >= 1) {
+      std::tm local;
+      std::time_t base = shownTime ? shownTime : std::time(NULL);
+      localtime_s(&local, &base);
+      local.tm_year = calendar.year - 1900;
+      local.tm_mon = calendar.month - 1;
+      local.tm_mday = hit;
+      local.tm_isdst = -1;
+      setManualTime(std::mktime(&local));
+    }
+  }
+
   // The charts for a time and place (recalculating the day's path when the
   // day or the place changes).
   void updateCharts(std::time_t when, const Observer & where, const SkyPosition & now)
@@ -506,6 +635,27 @@ namespace
     chartCurrent = now;
     InvalidateRect(altitudeChart, NULL, FALSE);
     InvalidateRect(horizonChart, NULL, FALSE);
+    InvalidateRect(skyDome, NULL, FALSE);
+
+    // The time-of-day slider, in five-minute steps.
+    LPARAM position = (LPARAM) ((when - start) / 300);
+    if (SendMessageW(timeSlider, TBM_GETPOS, 0, 0) != position)
+      SendMessageW(timeSlider, TBM_SETPOS, TRUE, position);
+
+    // The calendar follows the date into another month.
+    std::tm local;
+    localtime_s(&local, &when);
+    int year = local.tm_year + 1900, month = local.tm_mon + 1;
+    if (year != shownYear || month != shownMonth) {
+      calendarYear = year;
+      calendarMonthNumber = month;
+    }
+    shownYear = year;
+    shownMonth = month;
+    shownDay = local.tm_mday;
+    shownTime = when;
+    calendarMirrored = where.latitude < 0 && settings.observerView;
+    showCalendar();
   }
 
   void clearCharts()
@@ -515,6 +665,7 @@ namespace
     chartShowNow = false;
     InvalidateRect(altitudeChart, NULL, FALSE);
     InvalidateRect(horizonChart, NULL, FALSE);
+    InvalidateRect(skyDome, NULL, FALSE);
   }
 
   // Painted into a bitmap first, so the once-a-second updates don't flicker.
@@ -530,8 +681,12 @@ namespace
     ChartColours colours = chartColours(settings.darkMode);
     if (hwnd == altitudeChart)
       drawAltitudeChart(memory, r, chartTrack, chartShowNow, chartNow, chartCurrent, colours, font, dpiScale);
+    else if (hwnd == horizonChart)
+      drawHorizonChart(memory, r, chartTrack, chartShowNow, chartNow, chartCurrent, colours, font, dpiScale);
+    else if (hwnd == skyDome)
+      drawSkyDome(memory, r, chartTrack, chartShowNow, chartNow, chartCurrent, colours, font, dpiScale);
     else
-      drawHorizonChart(memory, r, chartTrack, chartShowNow, chartCurrent, colours, font, dpiScale);
+      drawCalendar(memory, r, calendar, calendarMirrored, colours, font, dpiScale);
     BitBlt(dc, 0, 0, r.right, r.bottom, memory, 0, 0, SRCCOPY);
     SelectObject(memory, old);
     DeleteObject(bitmap);
@@ -544,6 +699,10 @@ namespace
     switch (msg) {
       case WM_PAINT:      paintChart(hwnd); return 0;
       case WM_ERASEBKGND: return 1;
+      case WM_LBUTTONDOWN:
+        if (hwnd == calendarView)
+          onCalendarClick(hwnd, lp);
+        return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
   }
@@ -609,6 +768,8 @@ namespace
 
   std::string lastInputs;   // the inputs of the last calculation
   std::time_t lastTime = 0;
+  int playing = 0;          // 0, or ID_PLAY_DAY or ID_PLAY_MONTH while the time is running
+  double playTime = 0;
 
   void update()
   {
@@ -651,9 +812,10 @@ namespace
     now_settings.observerView = observerView;
     if (! automatic)
       now_settings.date = dateText;
-    if (now_settings.latitude != settings.latitude || now_settings.longitude != settings.longitude ||
-        now_settings.elevation != settings.elevation || now_settings.automatic != settings.automatic ||
-        now_settings.observerView != settings.observerView || now_settings.date != settings.date) {
+    if (! playing &&
+        (now_settings.latitude != settings.latitude || now_settings.longitude != settings.longitude ||
+         now_settings.elevation != settings.elevation || now_settings.automatic != settings.automatic ||
+         now_settings.observerView != settings.observerView || now_settings.date != settings.date)) {
       settings = now_settings;
       saveSettings(settings);
     }
@@ -670,7 +832,8 @@ namespace
     for (int i = 0; i < 4; ++i) {
       // (The next four quarters always include one new and one full moon.)
       if (moon.quarters[i].quarter == 0) setValue("nextNew", formatLocal(moon.quarters[i].time));
-      if (moon.quarters[i].quarter == 2) setValue("nextFull", formatLocal(moon.quarters[i].time));
+      if (moon.quarters[i].quarter == 2)
+        setValue("nextFull", formatLocal(moon.quarters[i].time) + (moon.nextFullIsSupermoon ? "  (supermoon)" : ""));
       setValue(("quarterName" + std::to_string(i)).c_str(), std::string(quarterName(moon.quarters[i].quarter)) + ":");
       setValue(("quarterTime" + std::to_string(i)).c_str(), formatLocal(moon.quarters[i].time));
     }
@@ -679,11 +842,93 @@ namespace
     setValue("parallactic", fixed(moon.parallactic, 2) + degree);
     setValue("ra", fixed(moon.ra, 2) + " h");
     setValue("dec", fixed(moon.dec, 2) + degree);
-    showMoon(moonGeometry(double(when), where), observerView ? moon.parallactic : 0);
+    MoonGeometry geometry = moonGeometry(double(when), where);
+    auto distanceText = [](double km) {
+      return settings.imperial ? withThousands(km / kmPerMile) + " miles" : withThousands(km) + " km";
+    };
+    auto signedText = [](double value) { return (value >= 0 ? "+" : "") + fixed(value, 1) + degree; };
+    setValue("age", fixed(moon.age, 1) + " days");
+    setValue("diameter", fixed(geometry.diameter * 60, 1) + " arcminutes");
+    setValue("constellation", moon.constellation);
+    setValue("libration", "longitude " + signedText(geometry.subEarthLon) + ", latitude " + signedText(geometry.subEarthLat));
+    setValue("perigee", formatLocal(moon.perigee).substr(0, 16) + "  (" + distanceText(moon.perigeeDistance) + ")");
+    setValue("apogee", formatLocal(moon.apogee).substr(0, 16) + "  (" + distanceText(moon.apogeeDistance) + ")");
+    showMoon(geometry, observerView ? moon.parallactic : 0);
     SkyPosition position;
     position.azimuth = moon.azimuth;
     position.altitude = moon.altitude;
     updateCharts(when, where, position);
+  }
+
+  //--------------------------------------------------------------------------
+  // Moving through time
+  //--------------------------------------------------------------------------
+
+  void stopPlaying()
+  {
+    if (! playing)
+      return;
+    KillTimer(mainWindow, TIMER_PLAY);
+    playing = 0;
+    setText(playDayButton, "Play day");
+    setText(playMonthButton, "Play month");
+    lastInputs.clear();   // (and remember the date it stopped at)
+    update();
+  }
+
+  // Show a time other than now: Automatic is unchecked.
+  void setManualTime(std::time_t when)
+  {
+    check(autoCheck, false);
+    EnableWindow(dateEdit, TRUE);
+    setText(dateEdit, formatLocal(when));
+    update();
+  }
+
+  void onDayStep(int days)
+  {
+    stopPlaying();
+    std::tm local;
+    std::time_t base = shownTime ? shownTime : std::time(NULL);
+    localtime_s(&local, &base);
+    local.tm_mday += days;
+    local.tm_isdst = -1;
+    setManualTime(std::mktime(&local));
+  }
+
+  // Run the time forward: a day in about six seconds, or a month in about
+  // fifteen.  The same button stops it.
+  void onPlay(int which)
+  {
+    bool stop = playing == which;
+    stopPlaying();
+    if (stop)
+      return;
+    playing = which;
+    playTime = double(shownTime ? shownTime : std::time(NULL));
+    setText(which == ID_PLAY_DAY ? playDayButton : playMonthButton, "Stop");
+    check(autoCheck, false);
+    EnableWindow(dateEdit, TRUE);
+    SetTimer(mainWindow, TIMER_PLAY, 40, NULL);
+  }
+
+  void onPlayTimer()
+  {
+    if (! playing)
+      return;
+    playTime += playing == ID_PLAY_DAY ? 600 : 7200;   // seconds of the Moon's time each frame
+    setText(dateEdit, formatLocal((std::time_t) playTime));
+    update();
+  }
+
+  // The slider: the time of day, on the day shown.
+  void onTimeSlider()
+  {
+    stopPlaying();
+    std::time_t start, end;
+    localDay(shownTime ? shownTime : std::time(NULL), start, end);
+    std::time_t when = start + (std::time_t) SendMessageW(timeSlider, TBM_GETPOS, 0, 0) * 300;
+    setManualTime(std::min(when, end - 1));
   }
 
   //--------------------------------------------------------------------------
@@ -759,6 +1004,7 @@ namespace
   void onAutomatic()
   {
     // Unchecked, the field keeps the time shown, for the user to edit.
+    stopPlaying();
     EnableWindow(dateEdit, ! isChecked(autoCheck));
     update();
   }
@@ -789,12 +1035,22 @@ namespace
     update();
   }
 
+  void onLabels()
+  {
+    settings.labels = ! settings.labels;
+    CheckMenuItem(viewMenu, ID_LABELS, settings.labels ? MF_CHECKED : MF_UNCHECKED);
+    saveSettings(settings);
+    RECT r = pictureRect();
+    InvalidateRect(mainWindow, &r, FALSE);
+  }
+
   void onDarkMode()
   {
     settings.darkMode = ! settings.darkMode;
     CheckMenuItem(viewMenu, ID_DARK, settings.darkMode ? MF_CHECKED : MF_UNCHECKED);
     saveSettings(settings);
     applyTheme(settings.darkMode);
+    showCalendar();
   }
 
   void showAbout()
@@ -816,6 +1072,10 @@ namespace
     std::wstring text = widen(
       "Date and Time: with Automatic checked, the computer's clock (updated every second); "
       "unchecked, type a local date and time, YYYY-MM-DD HH:MM:SS.\n\n"
+      "Time of day: drag the slider to another time on the day shown. \"< Day\" and \"Day >\" "
+      "go back and forward a day. \"Play day\" and \"Play month\" run the time forward (a day in "
+      "about six seconds, a month in about fifteen) so you can watch the Moon move, turn and "
+      "change phase; the same button stops it. Check Automatic to return to now.\n\n"
       "Location: \"Use My Location\" asks Windows' location service (if it's turned on for "
       "desktop apps in Windows' privacy settings), or failing that, looks up the approximate "
       "location of your internet address. Or type the latitude and longitude (degrees; north "
@@ -829,7 +1089,18 @@ namespace
       "its altitude by the hour, and its altitude by direction (east at the left, through "
       "south, west and north). The shaded part is below the horizon; the dot is the Moon now, "
       "and the small circles are the day's moonrise (up arrow) and moonset (down arrow), with "
-      "their times.\n\n"
+      "their times. The dashed line is the Sun, and the sky above the horizon in the first chart "
+      "is colored by the daylight: day, the three twilights, and night, when the Moon is best seen. "
+      "The round chart is the sky looking up: the horizon around the edge (north at the top, east "
+      "at the left), straight up in the middle.\n\n"
+      "Calendar: a little Moon for each day of the month, ringed on the days of the new moon, the "
+      "quarters and the full moon. Click a day to show it; the arrows beside the month's name show "
+      "the months before and after.\n\n"
+      "Age: days since the last new moon. Libration: how far the Moon is turned, east-west and "
+      "north-south, from facing us squarely. Perigee and apogee: when the Moon is next nearest and "
+      "farthest. A full moon closer than 367,600 km (228,400 miles) is marked as a supermoon.\n\n"
+      "View > Names of the seas and craters: labels the picture (more names appear as the picture "
+      "gets bigger).\n\n"
       "Parallactic angle: the angle between celestial north and straight up at the Moon. "
       "With View > \"Moon as seen from my location\" checked, the picture is turned by it so it's tilted as "
       "the Moon appears in your sky (roughly upside down in the southern hemisphere); "
@@ -853,6 +1124,11 @@ namespace
       case ID_VIEW:     onObserverView(); break;
       case ID_DARK:     onDarkMode(); break;
       case ID_UNITS:    onUnits(); break;
+      case ID_LABELS:   onLabels(); break;
+      case ID_PREVIOUS_DAY: onDayStep(-1); break;
+      case ID_NEXT_DAY:     onDayStep(1); break;
+      case ID_PLAY_DAY:
+      case ID_PLAY_MONTH:   onPlay(LOWORD(wp)); break;
       case ID_EXIT:     DestroyWindow(mainWindow); break;
       case ID_HELP:     showHelp(); break;
       case ID_ABOUT:    showAbout(); break;
@@ -875,6 +1151,10 @@ namespace
   {
     switch (msg) {
       case WM_VSCROLL:        onVScroll(wp); return 0;
+      case WM_HSCROLL:
+        if ((HWND) lp == timeSlider)
+          onTimeSlider();
+        return 0;
       case WM_MOUSEWHEEL:     onWheel(wp); return 0;
       case WM_SIZE:           setScrollRange(); return 0;
       case WM_COMMAND:        return SendMessageW(mainWindow, msg, wp, lp);
@@ -890,7 +1170,10 @@ namespace
   {
     switch (msg) {
       case WM_COMMAND:        onCommand(wp); return 0;
-      case WM_TIMER:          update(); return 0;
+      case WM_TIMER:
+        if (wp == TIMER_PLAY) onPlayTimer();
+        else if (! playing)   update();
+        return 0;
       case WM_LOCATED:        useFoundLocation(); update(); return 0;
       case WM_MOUSEWHEEL:     onWheel(wp); return 0;   // anywhere in the window scrolls the data
       case WM_SIZE: {
@@ -956,6 +1239,25 @@ namespace
     autoCheck = makeControl(panel, L"BUTTON", "Automatic", WS_TABSTOP | BS_AUTOCHECKBOX, valueX + 173, y + 2, 105,
                             rowHeight - 4, ID_AUTO);
     y += 32;
+
+    // Moving through time: the time of day, a day at a time, or running.
+    addLabel(panel, margin, y, labelWidth, "Time of day:");
+    timeSlider = makeControl(panel, TRACKBAR_CLASSW, "", WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS, valueX - 6, y,
+                             valueWidth + 12, rowHeight + 4);
+    SendMessageW(timeSlider, TBM_SETRANGE, FALSE, MAKELPARAM(0, 287));
+    SendMessageW(timeSlider, TBM_SETTICFREQ, 36, 0);    // a tick every three hours
+    SendMessageW(timeSlider, TBM_SETPAGESIZE, 0, 12);   // an hour
+    y += 36;
+    {
+      const int w = (panelWidth - 2 * margin - 3 * 8) / 4;
+      makeControl(panel, L"BUTTON", "< Day", WS_TABSTOP | BS_PUSHBUTTON, margin, y, w, rowHeight, ID_PREVIOUS_DAY);
+      makeControl(panel, L"BUTTON", "Day >", WS_TABSTOP | BS_PUSHBUTTON, margin + (w + 8), y, w, rowHeight, ID_NEXT_DAY);
+      playDayButton = makeControl(panel, L"BUTTON", "Play day", WS_TABSTOP | BS_PUSHBUTTON, margin + 2 * (w + 8), y, w,
+                                  rowHeight, ID_PLAY_DAY);
+      playMonthButton = makeControl(panel, L"BUTTON", "Play month", WS_TABSTOP | BS_PUSHBUTTON, margin + 3 * (w + 8), y, w,
+                                    rowHeight, ID_PLAY_MONTH);
+    }
+    y += 36;
     addLabel(panel, margin, y, labelWidth, "Location:");
     locationButton = makeControl(panel, L"BUTTON", "Use My Location", WS_TABSTOP | BS_PUSHBUTTON, valueX, y, 140,
                                  rowHeight, ID_LOCATION);
@@ -975,7 +1277,9 @@ namespace
     addValue(y, "Phase:", "phase");                   y += rowHeight;
     addValue(y, "Phase name:", "phaseName");          y += rowHeight;
     addValue(y, "Illumination:", "illumination");     y += rowHeight;
+    addValue(y, "Age:", "age");                       y += rowHeight;
     addValue(y, "Distance:", "distance");             y += rowHeight;
+    addValue(y, "Apparent diameter:", "diameter");    y += rowHeight;
     addValue(y, "Moonrise:", "moonrise");             y += rowHeight;
     addValue(y, "Moonset:", "moonset");               y += rowHeight;
     addValue(y, "Next new moon:", "nextNew");         y += rowHeight;
@@ -991,6 +1295,10 @@ namespace
     addValue(y, "Parallactic angle:", "parallactic"); y += rowHeight;
     addValue(y, "RA (J2000):", "ra");                 y += rowHeight;
     addValue(y, "Dec (J2000):", "dec");               y += rowHeight;
+    addValue(y, "Constellation:", "constellation");   y += rowHeight;
+    addValue(y, "Libration:", "libration");           y += rowHeight;
+    addValue(y, "Next perigee:", "perigee");          y += rowHeight;
+    addValue(y, "Next apogee:", "apogee");            y += rowHeight;
     problemLabel = makeControl(panel, L"STATIC", "", SS_LEFT, margin, y + 5, panelWidth - 2 * margin, 2 * rowHeight);
     y += 2 * rowHeight;
 
@@ -1003,7 +1311,17 @@ namespace
     addLabel(panel, margin, y, panelWidth - 2 * margin, "Path across the sky (altitude by direction):");
     y += rowHeight;
     horizonChart = makeControl(panel, L"MoonInfoChart", "", 0, margin, y, panelWidth - 2 * margin, chartHeight);
-    y += chartHeight;
+    y += chartHeight + 10;
+    addLabel(panel, margin, y, panelWidth - 2 * margin, "The sky, looking up (the horizon is the circle):");
+    y += rowHeight;
+    const int domeHeight = 330;
+    skyDome = makeControl(panel, L"MoonInfoChart", "", 0, margin, y, panelWidth - 2 * margin, domeHeight);
+    y += domeHeight + 10;
+    addLabel(panel, margin, y, panelWidth - 2 * margin, "Calendar (click a day to show it):");
+    y += rowHeight;
+    const int calendarHeight = 340;
+    calendarView = makeControl(panel, L"MoonInfoChart", "", 0, margin, y, panelWidth - 2 * margin, calendarHeight);
+    y += calendarHeight;
     contentHeight = y + margin;
 
     check(autoCheck, settings.automatic);
@@ -1017,6 +1335,7 @@ namespace
     AppendMenuW(file, MF_STRING, ID_EXIT, L"E&xit");
     auto checked = [](bool on) { return MF_STRING | (on ? MF_CHECKED : MF_UNCHECKED); };
     AppendMenuW(viewMenu, checked(settings.observerView), ID_VIEW, L"Moon &as seen from my location (unchecked: north up)");
+    AppendMenuW(viewMenu, checked(settings.labels), ID_LABELS, L"&Names of the seas and craters on the picture");
     AppendMenuW(viewMenu, checked(settings.darkMode), ID_DARK, L"&Dark mode");
     AppendMenuW(viewMenu, checked(settings.imperial), ID_UNITS, L"&Miles and feet (unchecked: km and meters)");
     AppendMenuW(help, MF_STRING, ID_HELP, L"&Using MoonInfo");
@@ -1039,7 +1358,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int showCommand)
   dpiScale = GetDeviceCaps(screen, LOGPIXELSY) / 96.0;
   ReleaseDC(NULL, screen);
   CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);   // (for WIC)
-  INITCOMMONCONTROLSEX icc = { sizeof icc, ICC_STANDARD_CLASSES };
+  INITCOMMONCONTROLSEX icc = { sizeof icc, ICC_STANDARD_CLASSES | ICC_BAR_CLASSES };
   InitCommonControlsEx(&icc);
 
   settings = loadSettings();

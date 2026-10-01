@@ -56,16 +56,56 @@ namespace mooninfo
     return "Waning Crescent";
   }
 
+  namespace
+  {
+    SkyPosition positionOf(astro_body_t body, double unixSeconds, const Observer & where);
+  }
+
   SkyPosition skyPosition(double unixSeconds, const Observer & where)
+  {
+    return positionOf(BODY_MOON, unixSeconds, where);
+  }
+
+  SkyPosition sunPosition(double unixSeconds, const Observer & where)
+  {
+    return positionOf(BODY_SUN, unixSeconds, where);
+  }
+
+  std::vector<MoonQuarter> quartersBetween(double start, double end)
+  {
+    std::vector<MoonQuarter> found;
+    astro_moon_quarter_t mq = Astronomy_SearchMoonQuarter(timeFromUnix(start));
+    while (mq.status == ASTRO_SUCCESS && found.size() < 16) {
+      double when = mq.time.ut * 86400.0 + j2000Unix;
+      if (when > end)
+        break;
+      MoonQuarter q;
+      q.quarter = mq.quarter;
+      q.time = unixFromTime(mq.time);
+      found.push_back(q);
+      mq = Astronomy_NextMoonQuarter(mq);
+    }
+    return found;
+  }
+
+  double phaseAt(double unixSeconds)
+  {
+    return Astronomy_MoonPhase(timeFromUnix(unixSeconds)).angle;
+  }
+
+  namespace
+  {
+  SkyPosition positionOf(astro_body_t body, double unixSeconds, const Observer & where)
   {
     astro_time_t time = timeFromUnix(unixSeconds);
     astro_observer_t observer = Astronomy_MakeObserver(where.latitude, where.longitude, where.elevation);
-    astro_equatorial_t equDate = Astronomy_Equator(BODY_MOON, &time, observer, EQUATOR_OF_DATE, ABERRATION);
+    astro_equatorial_t equDate = Astronomy_Equator(body, &time, observer, EQUATOR_OF_DATE, ABERRATION);
     astro_horizon_t hor = Astronomy_Horizon(&time, observer, equDate.ra, equDate.dec, REFRACTION_NORMAL);
     SkyPosition p;
     p.azimuth = hor.azimuth;
     p.altitude = hor.altitude;
     return p;
+  }
   }
 
   std::vector<HorizonEvent> horizonEvents(double start, double end, const Observer & where)
@@ -138,6 +178,45 @@ namespace mooninfo
       info.quarters[i].quarter = mq.quarter;
       info.quarters[i].time = unixFromTime(mq.time);
     }
+
+    // The age: since the last new moon (searching forward from 35 days back).
+    astro_time_t from = timeFromUnix(unixSeconds - 35 * 86400.0);
+    double lastNew = unixSeconds;
+    for (int i = 0; i < 3; ++i) {
+      astro_search_result_t found = Astronomy_SearchMoonPhase(0.0, from, 40);
+      if (found.status != ASTRO_SUCCESS)
+        break;
+      double when = found.time.ut * 86400.0 + j2000Unix;
+      if (when > unixSeconds)
+        break;
+      lastNew = when;
+      from = Astronomy_AddDays(found.time, 1);
+    }
+    info.age = (unixSeconds - lastNew) / 86400.0;
+
+    astro_constellation_t con = Astronomy_Constellation(equ2000.ra, equ2000.dec);
+    if (con.status == ASTRO_SUCCESS && con.name)
+      info.constellation = con.name;
+
+    // The next perigee and apogee (they alternate).
+    astro_apsis_t apsis = Astronomy_SearchLunarApsis(time);
+    for (int i = 0; i < 2 && apsis.status == ASTRO_SUCCESS; ++i) {
+      if (apsis.kind == APSIS_PERICENTER) {
+        info.perigee = unixFromTime(apsis.time);
+        info.perigeeDistance = apsis.dist_km;
+      }
+      else {
+        info.apogee = unixFromTime(apsis.time);
+        info.apogeeDistance = apsis.dist_km;
+      }
+      apsis = Astronomy_NextLunarApsis(apsis);
+    }
+
+    for (int i = 0; i < 4; ++i)
+      if (info.quarters[i].quarter == 2) {
+        astro_time_t full = timeFromUnix(double(info.quarters[i].time));
+        info.nextFullIsSupermoon = Astronomy_VectorLength(Astronomy_GeoMoon(full)) * KM_PER_AU < supermoonKm;
+      }
 
     // The website's frame: two per degree of phase, from frame 502.
     info.frame = static_cast<int>(std::trunc(info.phase * 2 + 502));

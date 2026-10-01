@@ -49,6 +49,12 @@ namespace mooninfo
   void renderMoon(const MoonMaps & maps, const MoonGeometry & geometry, int size, double angle,
                   std::vector<std::uint32_t> & pixels);
 
+  // Where a place on the Moon (selenographic degrees, east and north
+  // positive) is in the picture renderMoon() draws: its pixel, and whether
+  // it's on the side facing the observer.
+  bool projectToPicture(const MoonGeometry & geometry, int size, double angle, double longitude, double latitude,
+                        double & x, double & y);
+
 #ifdef _WIN32
   // Read moon_color.jpg and moon_height.png (Windows Imaging Component; COM
   // must be initialized).  Returns false if they can't be read.

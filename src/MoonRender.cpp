@@ -92,6 +92,24 @@ namespace mooninfo
     return g;
   }
 
+  bool projectToPicture(const MoonGeometry & g, int size, double angle, double longitude, double latitude,
+                        double & x, double & y)
+  {
+    // (The same view as renderMoon().)
+    const Vec3 d = g.toMoon, z = vec(0, 0, 1);
+    Vec3 up = unit(z - d * dot(z, d));
+    Vec3 right = unit(cross(z, d)) * -1;
+    double a = angle * toRad, c = std::cos(a), s = std::sin(a);
+    Vec3 right2 = right * c + up * s, up2 = up * c - right * s;
+    const double radius = size / 2.0 * 0.96 * std::min(1.0, g.diameter / 0.57);
+    double lon = longitude * toRad, lat = latitude * toRad;
+    Vec3 p = g.prime * (std::cos(lat) * std::cos(lon)) + g.east90 * (std::cos(lat) * std::sin(lon))
+             + g.pole * std::sin(lat);
+    x = size / 2.0 + dot(p, right2) * radius;
+    y = size / 2.0 - dot(p, up2) * radius;
+    return dot(p, d) < -0.12;   // (not at the very edge, where names would pile up)
+  }
+
   void renderMoon(const MoonMaps & maps, const MoonGeometry & g, int size, double angle,
                   std::vector<std::uint32_t> & pixels)
   {

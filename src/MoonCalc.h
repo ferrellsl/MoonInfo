@@ -36,7 +36,17 @@ namespace mooninfo
     double ra = 0, dec = 0;    // J2000, hours and degrees
     double distance = 0;       // Earth's centre to the Moon's centre, km
     int frame = 0;             // the Moon Info website's image frame for the phase (moon.NNNN.jpg)
+
+    double age = 0;            // days since the last new moon
+    std::string constellation; // the constellation the Moon is in
+    std::time_t perigee = 0, apogee = 0;          // the next of each
+    double perigeeDistance = 0, apogeeDistance = 0;   // km
+    bool nextFullIsSupermoon = false;   // the next full moon is closer than supermoonKm
   };
+
+  // A full moon nearer than this (centre to centre, km) is called a supermoon
+  // here: within 90% of the way from the Moon's farthest to its nearest.
+  const double supermoonKm = 367600;
 
   // Everything for the given time (UTC seconds) and place.
   MoonInfo calculate(double unixSeconds, const Observer & observer);
@@ -48,6 +58,13 @@ namespace mooninfo
     double azimuth = 0, altitude = 0;
   };
   SkyPosition skyPosition(double unixSeconds, const Observer & observer);
+  SkyPosition sunPosition(double unixSeconds, const Observer & observer);
+
+  // The new moons, quarters and full moons between two times (UTC seconds).
+  std::vector<MoonQuarter> quartersBetween(double start, double end);
+
+  // The Moon's phase angle (as MoonInfo::phase) at a time.
+  double phaseAt(double unixSeconds);
 
   // The moonrises and moonsets between two times (UTC seconds), in order:
   // the same events as MoonInfo's rise and set.

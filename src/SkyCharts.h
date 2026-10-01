@@ -22,6 +22,16 @@ namespace mooninfo
     double start = 0, end = 0;               // UTC seconds: local midnight to the next
     std::vector<double> times;               // UTC seconds
     std::vector<SkyPosition> positions;
+
+    // The day's moonrises and moonsets, marked on the charts.
+    struct Event
+    {
+      double time = 0;
+      bool rise = false;
+      SkyPosition position;                  // where the Moon is then
+      SkyPosition below;                     // and ten minutes earlier (rise) or later (set), below the horizon
+    };
+    std::vector<Event> events;
   };
 
   DayTrack dayTrack(double start, double end, const Observer & observer);

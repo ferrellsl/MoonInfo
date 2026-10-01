@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <string>
 
 #include "SkyCharts.h"
@@ -116,6 +117,41 @@ namespace mooninfo
       g.DrawEllipse(&ring, x - r, y - r, 2 * r, 2 * r);
     }
 
+    // A moonrise or moonset: a mark on the curve and its time, beside it in
+    // the shaded part, on the side away from the curve below the horizon
+    // (belowX: where the curve is just below the horizon).
+    void drawEvent(Gdiplus::Graphics & g, const Plot & p, const DayTrack::Event & e, float x, float belowX,
+                   const ChartColours & c, Gdiplus::Font & font, float textHeight, double scale)
+    {
+      float y = p.y(e.position.altitude), r = float(3.5 * scale);
+      Gdiplus::SolidBrush fill(colour(c.background));
+      Gdiplus::Pen ring(colour(c.text), float(1.5 * scale));
+      g.FillEllipse(&fill, x - r, y - r, 2 * r, 2 * r);
+      g.DrawEllipse(&ring, x - r, y - r, 2 * r, 2 * r);
+
+      // An up or down arrow and the local time, "HH:MM".
+      std::time_t when = static_cast<std::time_t>(std::floor(e.time + 0.5));
+      std::tm local;
+      if (localtime_s(&local, &when) != 0)
+        return;
+      wchar_t clock[16];
+      std::wcsftime(clock, 16, L"%H:%M", &local);
+      std::wstring label = std::wstring(1, wchar_t(e.rise ? 0x2191 : 0x2193)) + L" " + clock;
+
+      Gdiplus::RectF box;
+      g.MeasureString(label.c_str(), -1, &font, Gdiplus::PointF(0, 0), &box);
+      float gap = float(5 * scale);
+      bool toRight = belowX <= x, flipped = false;
+      if (toRight && x + gap + box.Width > p.right)        { toRight = false; flipped = true; }
+      else if (! toRight && x - gap - box.Width < p.left)  { toRight = true;  flipped = true; }
+      float left = toRight ? x + gap : x - gap - box.Width;
+      // With no room on that side it goes on the other, above the horizon
+      // (where the curve below the horizon isn't).
+      float top = flipped ? p.y(0) - box.Height - float(1 * scale) : p.y(0) + float(2 * scale);
+      Gdiplus::SolidBrush text(colour(c.text));
+      g.DrawString(label.c_str(), -1, &font, Gdiplus::PointF(left, top), &text);
+    }
+
     // The horizon chart's x: east at the left, through south, west and
     // north, to east again at the right.
     double azimuthFraction(double azimuth)
@@ -150,6 +186,14 @@ namespace mooninfo
       double when = std::min(t, end);
       track.times.push_back(when);
       track.positions.push_back(skyPosition(when, observer));
+    }
+    for (const HorizonEvent & e : horizonEvents(start, end, observer)) {
+      DayTrack::Event event;
+      event.time = e.time;
+      event.rise = e.rise;
+      event.position = skyPosition(e.time, observer);
+      event.below = skyPosition(e.time + (e.rise ? -600 : 600), observer);
+      track.events.push_back(event);
     }
     return track;
   }
@@ -195,6 +239,10 @@ namespace mooninfo
     Gdiplus::Pen curve(colour(c.curve), float(2.2 * scale));
     curve.SetLineJoin(Gdiplus::LineJoinRound);
     g.DrawLines(&curve, points.data(), int(points.size()));
+    for (const DayTrack::Event & e : track.events) {
+      float x = p.x((e.time - track.start) / span);
+      drawEvent(g, p, e, x, e.rise ? x - 1 : x + 1, c, painter.font, painter.textHeight, scale);
+    }
     if (showNow && now >= track.start && now <= track.end)
       drawDot(g, p.x((now - track.start) / span), p.y(current.altitude), c, scale);
   }
@@ -228,6 +276,9 @@ namespace mooninfo
     }
     if (points.size() > 1)
       g.DrawLines(&curve, points.data(), int(points.size()));
+    for (const DayTrack::Event & e : track.events)
+      drawEvent(g, p, e, p.x(azimuthFraction(e.position.azimuth)), p.x(azimuthFraction(e.below.azimuth)), c,
+                painter.font, painter.textHeight, scale);
     if (showNow)
       drawDot(g, p.x(azimuthFraction(current.azimuth)), p.y(current.altitude), c, scale);
   }

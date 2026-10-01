@@ -5,6 +5,7 @@
 //
 // Copyright 2026 Steve Ferrell.
 
+#include <algorithm>
 #include <cmath>
 
 extern "C" {
@@ -65,6 +66,32 @@ namespace mooninfo
     p.azimuth = hor.azimuth;
     p.altitude = hor.altitude;
     return p;
+  }
+
+  std::vector<HorizonEvent> horizonEvents(double start, double end, const Observer & where)
+  {
+    std::vector<HorizonEvent> events;
+    astro_observer_t observer = Astronomy_MakeObserver(where.latitude, where.longitude, where.elevation);
+    for (int pass = 0; pass < 2; ++pass) {
+      astro_direction_t direction = pass == 0 ? DIRECTION_RISE : DIRECTION_SET;
+      double from = start;
+      while (from < end && events.size() < 8) {
+        astro_search_result_t found = Astronomy_SearchRiseSet(BODY_MOON, observer, direction, timeFromUnix(from),
+                                                              (end - from) / 86400.0);
+        if (found.status != ASTRO_SUCCESS)
+          break;
+        double when = found.time.ut * 86400.0 + j2000Unix;
+        if (when > end)
+          break;
+        HorizonEvent e;
+        e.time = when;
+        e.rise = pass == 0;
+        events.push_back(e);
+        from = when + 600;   // (the next one is hours later)
+      }
+    }
+    std::sort(events.begin(), events.end(), [](const HorizonEvent & a, const HorizonEvent & b) { return a.time < b.time; });
+    return events;
   }
 
   MoonInfo calculate(double unixSeconds, const Observer & where)

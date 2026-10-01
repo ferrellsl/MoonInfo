@@ -9,6 +9,7 @@
 
 #include <ctime>
 #include <string>
+#include <vector>
 
 namespace mooninfo
 {
@@ -47,6 +48,15 @@ namespace mooninfo
     double azimuth = 0, altitude = 0;
   };
   SkyPosition skyPosition(double unixSeconds, const Observer & observer);
+
+  // The moonrises and moonsets between two times (UTC seconds), in order:
+  // the same events as MoonInfo's rise and set.
+  struct HorizonEvent
+  {
+    double time = 0;
+    bool rise = false;       // else a moonset
+  };
+  std::vector<HorizonEvent> horizonEvents(double start, double end, const Observer & observer);
 
   const char * quarterName(int quarter);
 
